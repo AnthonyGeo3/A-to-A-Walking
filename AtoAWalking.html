@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A to A Walking Challenge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+        }
+        .progress-bar-container {
+            height: 60vh;
+            min-height: 400px;
+            width: 100px; /* Wider bars */
+        }
+        .progress-bar-track {
+            background-color: #e0e0e0;
+            border: 2px solid #d1d5db; /* Lighter border */
+        }
+        .progress-bar-fill-ant {
+            background: linear-gradient(to top, #4ade80, #34d399); /* Green gradient */
+            transition: height 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        .progress-bar-fill-amy {
+            background: linear-gradient(to top, #a855f7, #9333ea); /* Purple gradient */
+            transition: height 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        .milestone {
+            transform: translateX(10px);
+            opacity: 0;
+            transition: all 0.5s ease-in-out;
+        }
+        .milestone-line {
+            width: 20px;
+            height: 2px;
+            background-color: #6b7280;
+        }
+        .milestone-text {
+            white-space: nowrap;
+        }
+        .milestone.visible {
+            opacity: 1;
+        }
+        .stretch-goal-card {
+            transition: all 0.5s ease;
+            border-left-width: 4px;
+        }
+        .stretch-goal-card.achieved {
+            border-left-color: #f59e0b; /* Amber color for achieved */
+            transform: scale(1.03);
+        }
+        .log-entry {
+            transition: background-color 0.2s ease-in-out;
+        }
+        .log-entry:hover {
+            background-color: #f9fafb;
+        }
+        .log-actions button {
+            opacity: 0.5;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .log-entry:hover .log-actions button {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-6 md:p-8">
+
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">A to A Walking!</h1>
+            <p class="text-gray-500 mt-2">Walking Challenge: 1st Oct 2025 - 1st Oct 2026</p>
+        </div>
+
+        <!-- User Selection and Input Form -->
+        <div class="bg-gray-50 p-6 rounded-xl shadow-inner mb-8">
+            <h2 class="text-xl font-semibold text-center mb-4">Log Your Daily Steps</h2>
+            <div class="flex justify-center gap-4 mb-4" id="user-selector">
+                <!-- User buttons will be inserted here -->
+            </div>
+            <form id="step-form" class="hidden flex flex-col sm:flex-row items-center justify-center gap-3">
+                <input type="number" id="step-input" placeholder="Enter today's steps" class="w-full sm:w-64 text-center p-3 border border-gray-300 rounded-lg focus:border-transparent transition" required min="1">
+                <button type="submit" class="w-full sm:w-auto text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 shadow">
+                    Add Steps
+                </button>
+            </form>
+            <p id="feedback-message" class="text-center text-green-600 font-medium mt-3 h-5"></p>
+        </div>
+
+
+        <!-- Progress Display -->
+        <div class="flex flex-col md:flex-row justify-around items-end gap-12 md:gap-8 px-4">
+            <!-- User 1 Progress -->
+            <div id="user1-progress" class="flex flex-col items-center w-full md:w-auto"></div>
+            <!-- User 2 Progress -->
+            <div id="user2-progress" class="flex flex-col items-center w-full md:w-auto"></div>
+        </div>
+
+        <!-- Stats Section -->
+        <div class="mt-12 pt-8 border-t border-gray-200">
+            <h2 class="text-2xl font-bold text-center text-gray-700 mb-4">Stats</h2>
+            <div class="flex justify-center mb-6">
+                <select id="stats-filter" class="p-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500">
+                    <!-- Options will be populated by JS -->
+                </select>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-center">
+                <!-- Ant's Stats -->
+                <div>
+                    <h3 class="text-xl font-semibold mb-2">Ant's Stats</h3>
+                    <div class="bg-gray-50 p-4 rounded-lg grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-sm text-gray-500">Average Daily</p>
+                            <p id="user1-avg-steps" class="text-2xl font-bold text-green-600">0</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Predicted Total</p>
+                            <p id="user1-predicted-steps" class="text-2xl font-bold text-green-600">0</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Amy's Stats -->
+                <div>
+                    <h3 class="text-xl font-semibold mb-2">Amy's Stats</h3>
+                    <div class="bg-gray-50 p-4 rounded-lg grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-sm text-gray-500">Average Daily</p>
+                            <p id="user2-avg-steps" class="text-2xl font-bold text-purple-600">0</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Predicted Total</p>
+                            <p id="user2-predicted-steps" class="text-2xl font-bold text-purple-600">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Stretch Goals Section -->
+        <div class="mt-12 pt-8 border-t border-gray-200">
+            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Stretch Goals</h2>
+            <div id="stretch-goals-container" class="space-y-4">
+                <!-- Stretch goals will be inserted here -->
+            </div>
+        </div>
+        
+        <!-- Log Section -->
+        <div class="mt-12 pt-8 border-t border-gray-200">
+            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Log</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="text-xl font-semibold text-center mb-4">Ant's Log</h3>
+                    <div id="user1-log" class="space-y-2 max-h-96 overflow-y-auto pr-2"></div>
+                </div>
+                <div>
+                    <h3 class="text-xl font-semibold text-center mb-4">Amy's Log</h3>
+                    <div id="user2-log" class="space-y-2 max-h-96 overflow-y-auto pr-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Note Edit Modal -->
+    <div id="note-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md relative">
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Add a Note</h3>
+            <form id="note-form">
+                <textarea id="note-input" maxlength="150" class="w-full p-2 border border-gray-300 rounded-lg h-24 resize-none" placeholder="What did you do today? (max 150 chars)"></textarea>
+                <div class="flex justify-end gap-3 mt-4">
+                    <button type="button" id="note-cancel" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Date Edit Modal -->
+    <div id="date-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm relative">
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Change Date</h3>
+            <form id="date-form">
+                <input type="date" id="date-input" class="w-full p-2 border border-gray-300 rounded-lg">
+                <div class="flex justify-end gap-3 mt-4">
+                    <button type="button" id="date-cancel" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm relative text-center">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Are you sure?</h3>
+            <p id="confirm-modal-text" class="text-gray-600 mb-6"></p>
+            <div class="flex justify-center gap-4">
+                <button id="confirm-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg">Cancel</button>
+                <button id="confirm-delete-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg">Delete</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Firebase and App Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, deleteDoc, query, where, orderBy, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // --- ⚙️ CUSTOMIZE YOUR CHALLENGE HERE ⚙️ ---
+        const USER_1_NAME = "Ant";
+        const USER_2_NAME = "Amy";
+        const MAIN_GOAL = 910000;
+        const MILESTONES = { /* ... milestone data ... */ };
+        const SHARED_STRETCH_GOALS = [ /* ... shared goals ... */ ];
+        const INDIVIDUAL_STRETCH_GOALS = { /* ... individual goals ... */ };
+        // --- NOTE: Collapsed customization for brevity ---
+        MILESTONES.user1 = [
+            { steps: 40000, label: "Wrexham to Nantwich! 🏡" }, { steps: 250000, label: "Quarter Million!" }, { steps: 500000, label: "Half a Mill! 🎉" }, { steps: 750000, label: "So close!" }, { steps: MAIN_GOAL, label: "Paris Bound! ✈️🇫🇷" }
+        ];
+        MILESTONES.user2 = [
+            { steps: 40000, label: "Nantwich to Wrexham! 🏡" }, { steps: 250000, label: "A quarter of a million!" }, { steps: 500000, label: "Halfway there! 🎉" }, { steps: 750000, label: "The final stretch!" }, { steps: MAIN_GOAL, label: "Paris, here we come! ✈️🇫🇷" }
+        ];
+        SHARED_STRETCH_GOALS.push({ steps: 1000000, label: "Book Disneyland Paris!", reward: "🏰🐭" });
+        INDIVIDUAL_STRETCH_GOALS.user1 = [{ steps: 1500000, label: "New Graphics Card!", reward: "💻" }];
+        INDIVIDUAL_STRETCH_GOALS.user2 = [{ steps: 1500000, label: "New Pair of Heels!", reward: "👠" }];
+        // --- End of Customization ---
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'walking-challenge-app';
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        let currentUser = null;
+        let userData = { user1: { name: USER_1_NAME, steps: 0 }, user2: { name: USER_2_NAME, steps: 0 }};
+        let logData = [];
+
+        const userSelector = document.getElementById('user-selector');
+        const stepForm = document.getElementById('step-form');
+        const stepInput = document.getElementById('step-input');
+        const feedbackMessage = document.getElementById('feedback-message');
+        const stretchGoalsContainer = document.getElementById('stretch-goals-container');
+        const user1LogContainer = document.getElementById('user1-log');
+        const user2LogContainer = document.getElementById('user2-log');
+        const noteModal = document.getElementById('note-modal');
+        const noteForm = document.getElementById('note-form');
+        const noteInput = document.getElementById('note-input');
+        const noteCancelBtn = document.getElementById('note-cancel');
+        const confirmModal = document.getElementById('confirm-modal');
+        const confirmModalText = document.getElementById('confirm-modal-text');
+        const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const dateModal = document.getElementById('date-modal');
+        const dateForm = document.getElementById('date-form');
+        const dateInput = document.getElementById('date-input');
+        const dateCancelBtn = document.getElementById('date-cancel');
+        const statsFilter = document.getElementById('stats-filter');
+        const user1AvgSteps = document.getElementById('user1-avg-steps');
+        const user2AvgSteps = document.getElementById('user2-avg-steps');
+        const user1PredictedSteps = document.getElementById('user1-predicted-steps');
+        const user2PredictedSteps = document.getElementById('user2-predicted-steps');
+        
+        // --- Firestore References ---
+        const publicDataCollection = collection(db, 'artifacts', appId, 'public', 'data', 'challengeData');
+        const user1DocRef = doc(publicDataCollection, 'user1');
+        const user2DocRef = doc(publicDataCollection, 'user2');
+        const logsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'challengeLogs');
+
+        // --- Logic ---
+
+        async function initializeUserDocs() {
+            try {
+                const [user1Doc, user2Doc] = await Promise.all([getDoc(user1DocRef), getDoc(user2DocRef)]);
+                if (!user1Doc.exists()) await setDoc(user1DocRef, { name: USER_1_NAME, steps: 0 });
+                if (!user2Doc.exists()) await setDoc(user2DocRef, { name: USER_2_NAME, steps: 0 });
+            } catch (error) { console.error("Error initializing user documents:", error); }
+        }
+        
+        function getAllGoalsForUser(userKey) {
+            const userMilestones = MILESTONES[userKey] || [];
+            const userStretchGoals = INDIVIDUAL_STRETCH_GOALS[userKey] || [];
+            return [...userMilestones, ...SHARED_STRETCH_GOALS, ...userStretchGoals].sort((a, b) => a.steps - b.steps);
+        }
+
+        // --- UI Rendering ---
+
+        function renderProgress(containerId, userKey) {
+            const user = userData[userKey];
+            const container = document.getElementById(containerId);
+            const allUserGoals = getAllGoalsForUser(userKey);
+            const nextGoal = allUserGoals.find(g => user.steps < g.steps) || allUserGoals[allUserGoals.length - 1] || { steps: MAIN_GOAL };
+            const displayGoal = nextGoal.steps;
+            const progressPercent = displayGoal > 0 ? Math.min((user.steps / displayGoal) * 100, 100) : 0;
+            const formattedSteps = user.steps.toLocaleString();
+            const formattedDisplayGoal = displayGoal.toLocaleString();
+
+            const fillClass = userKey === 'user1' ? 'progress-bar-fill-ant' : 'progress-bar-fill-amy';
+
+            container.innerHTML = `
+                <h3 class="text-2xl font-bold mb-3">${user.name}</h3>
+                <div class="relative progress-bar-container flex justify-center">
+                    <div class="w-full progress-bar-track rounded-full overflow-hidden relative">
+                        <div class="${fillClass} w-full absolute bottom-0" style="height: ${progressPercent}%"></div>
+                    </div>
+                    <div id="${userKey}-milestones" class="absolute top-0 left-full w-48 h-full"></div>
+                </div>
+                <div class="text-center mt-3">
+                    <p class="text-xl font-semibold">${formattedSteps}</p>
+                    <p class="text-sm text-gray-500">/ ${formattedDisplayGoal}</p>
+                </div>
+            `;
+            renderMilestones(`${userKey}-milestones`, displayGoal, userKey);
+        }
+
+        function renderMilestones(containerId, displayGoal, userKey) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            const allMilestones = getAllGoalsForUser(userKey);
+            allMilestones.forEach(milestone => {
+                const percent = displayGoal > 0 ? (milestone.steps / displayGoal) * 100 : 0;
+                if (percent <= 105) {
+                    const milestoneEl = document.createElement('div');
+                    milestoneEl.className = 'milestone absolute flex items-center';
+                    milestoneEl.style.bottom = `calc(${percent}% - 8px)`;
+                    milestoneEl.innerHTML = `<div class="milestone-line"></div><span class="milestone-text text-xs text-gray-600 font-medium ml-2">${milestone.label}</span>`;
+                    container.appendChild(milestoneEl);
+                }
+            });
+        }
+
+        function renderLogs() {
+            user1LogContainer.innerHTML = '';
+            user2LogContainer.innerHTML = '';
+            
+            const sortedLogs = [...logData].sort((a, b) => b.date.toMillis() - a.date.toMillis());
+
+            sortedLogs.forEach(log => {
+                const logContainer = log.userId === 'user1' ? user1LogContainer : user2LogContainer;
+                const entryEl = document.createElement('div');
+                entryEl.className = 'log-entry p-3 border rounded-lg flex justify-between items-center';
+                
+                const date = log.date.toDate();
+                const formattedDate = date.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' });
+                const isoDate = date.toISOString().split('T')[0];
+                const colorClass = log.userId === 'user1' ? 'text-green-600' : 'text-purple-600';
+                
+                entryEl.innerHTML = `
+                    <div class="flex-grow">
+                         <div class="flex items-center">
+                            <span class="font-bold ${colorClass} mr-2">${log.steps.toLocaleString()}</span>
+                            <button type="button" class="edit-date-btn text-sm text-gray-500 cursor-pointer hover:underline" data-log-id="${log.id}" data-date="${isoDate}">
+                                ${formattedDate}
+                            </button>
+                        </div>
+                        <p class="text-sm text-gray-700 mt-1">${log.note || ''}</p>
+                    </div>
+                    <div class="log-actions flex items-center gap-2 ml-2">
+                        <button data-log-id="${log.id}" data-note="${log.note || ''}" class="edit-note-btn text-blue-500 hover:text-blue-700 p-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
+                        </button>
+                        <button data-log-id="${log.id}" data-steps="${log.steps}" data-user-id="${log.userId}" class="delete-log-btn text-red-500 hover:text-red-700 p-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </div>
+                `;
+                logContainer.appendChild(entryEl);
+            });
+        }
+        
+        function renderStretchGoals() {
+            const container = document.getElementById("stretch-goals-container");
+            container.innerHTML = "";
+
+            const endDate = new Date('2026-10-01T00:00:00');
+            const today = new Date();
+            const daysRemaining = Math.max(1, Math.ceil((endDate - today) / (1000 * 60 * 60 * 24)));
+
+            const bothUsersExist = userData.user1 && userData.user2;
+
+            // Render Shared Goals
+            SHARED_STRETCH_GOALS.forEach(goal => {
+                const isAchieved = bothUsersExist && userData.user1.steps >= goal.steps && userData.user2.steps >= goal.steps;
+                
+                const antStepsNeeded = Math.max(0, goal.steps - (userData.user1?.steps || 0));
+                const amyStepsNeeded = Math.max(0, goal.steps - (userData.user2?.steps || 0));
+                const antDailyAvg = Math.ceil(antStepsNeeded / daysRemaining);
+                const amyDailyAvg = Math.ceil(amyStepsNeeded / daysRemaining);
+
+                const dailyAvgHtml = isAchieved ? '' : `
+                    <p class="text-xs text-gray-500 mt-1">
+                        Daily avg needed: 
+                        <span class="font-bold text-green-600">Ant: ${antDailyAvg.toLocaleString()}</span> | 
+                        <span class="font-bold text-purple-600">Amy: ${amyDailyAvg.toLocaleString()}</span>
+                    </p>`;
+
+                const goalEl = document.createElement("div");
+                goalEl.className = `stretch-goal-card bg-white p-4 rounded-lg shadow flex justify-between items-center border-l-gray-300 ${isAchieved ? "achieved bg-amber-50" : ""}`;
+                goalEl.innerHTML = `
+                    <div>
+                        <p class="font-semibold text-lg ${isAchieved ? "text-amber-700" : "text-gray-800"}">${goal.label} (Shared)</p>
+                        <p class="text-sm text-gray-500">${goal.steps.toLocaleString()} steps each</p>
+                        ${dailyAvgHtml}
+                    </div>
+                    <div class="text-3xl">${goal.reward}</div>`;
+                container.appendChild(goalEl);
+            });
+
+            // Render Individual Goals
+            ['user1', 'user2'].forEach(userKey => {
+                const user = userData[userKey];
+                (INDIVIDUAL_STRETCH_GOALS[userKey] || []).forEach(goal => {
+                    if (!user) return;
+                    const isAchieved = user.steps >= goal.steps;
+                    
+                    const stepsNeeded = Math.max(0, goal.steps - user.steps);
+                    const dailyAvg = Math.ceil(stepsNeeded / daysRemaining);
+                    
+                    const colorClass = userKey === 'user1' ? 'text-green-600' : 'text-purple-600';
+                    const dailyAvgHtml = isAchieved ? '' : `
+                        <p class="text-xs text-gray-500 mt-1">
+                            Daily avg needed: <span class="font-bold ${colorClass}">${dailyAvg.toLocaleString()}</span>
+                        </p>`;
+
+                    const goalEl = document.createElement("div");
+                    goalEl.className = `stretch-goal-card bg-white p-4 rounded-lg shadow flex justify-between items-center border-l-gray-300 ${isAchieved ? "achieved bg-amber-50" : ""}`;
+                    goalEl.innerHTML = `
+                        <div>
+                            <p class="font-semibold text-lg ${isAchieved ? "text-amber-700" : "text-gray-800"}">${goal.label} (${user.name})</p>
+                            <p class="text-sm text-gray-500">${goal.steps.toLocaleString()} steps</p>
+                            ${dailyAvgHtml}
+                        </div>
+                        <div class="text-3xl">${goal.reward}</div>`;
+                    container.appendChild(goalEl);
+                });
+            });
+        }
+
+        function calculateAndRenderStats() {
+            const filterValue = statsFilter.value;
+            const today = new Date();
+            const challengeStart = new Date('2025-10-01T00:00:00');
+
+            ['user1', 'user2'].forEach(userKey => {
+                const userLogs = logData.filter(log => log.userId === userKey);
+                let totalSteps = 0;
+                let divisor = 1;
+                let multiplier = 365; // Default for 'all'
+                let averageSteps = 0;
+
+                if (filterValue === 'all') {
+                    totalSteps = userData[userKey].steps;
+                    const diffTime = Math.max(0, today - challengeStart);
+                    divisor = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                } else {
+                    const selectedMonth = parseInt(filterValue, 10);
+                    const year = selectedMonth >= 9 ? 2025 : 2026;
+
+                    const filteredLogs = userLogs.filter(log => {
+                        const logDate = log.date.toDate();
+                        return logDate.getMonth() === selectedMonth && logDate.getFullYear() === year;
+                    });
+                    totalSteps = filteredLogs.reduce((sum, log) => sum + log.steps, 0);
+
+                    const currentMonth = today.getMonth();
+                    const currentYear = today.getFullYear();
+
+                    if (selectedMonth === currentMonth && year === currentYear) {
+                        divisor = today.getDate();
+                    } else {
+                        divisor = new Date(year, selectedMonth + 1, 0).getDate();
+                    }
+                    multiplier = divisor; // For monthly, multiplier is just the number of days in that month
+                }
+                
+                divisor = Math.max(1, divisor); // Prevent division by zero
+                averageSteps = totalSteps / divisor;
+                const predictedSteps = averageSteps * multiplier;
+
+                const avgTarget = userKey === 'user1' ? user1AvgSteps : user2AvgSteps;
+                const predictedTarget = userKey === 'user1' ? user1PredictedSteps : user2PredictedSteps;
+                
+                avgTarget.textContent = Math.round(averageSteps).toLocaleString();
+                predictedTarget.textContent = Math.round(predictedSteps).toLocaleString();
+            });
+        }
+
+        function updateUI() {
+            if (!userData.user1 || !userData.user2) return;
+            renderProgress('user1-progress', 'user1');
+            renderProgress('user2-progress', 'user2');
+            renderStretchGoals();
+            renderLogs();
+            calculateAndRenderStats();
+            setTimeout(() => document.querySelectorAll('.milestone').forEach(m => m.classList.add('visible')), 100);
+        }
+
+        // --- Event Handlers ---
+        
+        function setupUserSelector() {
+            ['user1', 'user2'].forEach(userKey => {
+                const button = document.createElement('button');
+                button.dataset.user = userKey;
+                button.textContent = userData[userKey].name;
+                button.className = "px-6 py-2 text-lg font-semibold border-2 border-transparent rounded-lg transition bg-gray-200";
+                userSelector.appendChild(button);
+            });
+
+            userSelector.addEventListener("click", e => {
+                if (e.target.tagName !== 'BUTTON') return;
+
+                currentUser = e.target.dataset.user;
+                const isAnt = currentUser === 'user1';
+                
+                Array.from(userSelector.children).forEach(button => {
+                    const isSelected = button.dataset.user === currentUser;
+                    button.classList.remove('bg-green-500', 'bg-purple-500', 'text-white', 'bg-gray-200');
+                    if (isSelected) {
+                        button.classList.add(isAnt ? 'bg-green-500' : 'bg-purple-500', 'text-white');
+                    } else {
+                        button.classList.add('bg-gray-200');
+                    }
+                });
+                
+                const formButton = stepForm.querySelector('button[type="submit"]');
+                formButton.classList.remove('bg-green-500', 'hover:bg-green-600', 'bg-purple-500', 'hover:bg-purple-600');
+                stepInput.classList.remove('focus:ring-2', 'focus:ring-green-500', 'focus:ring-purple-500');
+                
+                if (isAnt) {
+                    formButton.classList.add('bg-green-500', 'hover:bg-green-600');
+                    stepInput.classList.add('focus:ring-2', 'focus:ring-green-500');
+                } else {
+                    formButton.classList.add('bg-purple-500', 'hover:bg-purple-600');
+                    stepInput.classList.add('focus:ring-2', 'focus:ring-purple-500');
+                }
+
+                stepForm.classList.remove("hidden");
+                stepInput.focus();
+            });
+        }
+        
+        async function handleStepSubmit(e) {
+            e.preventDefault();
+            if (!currentUser) return;
+            const steps = parseInt(stepInput.value, 10);
+            if (isNaN(steps) || steps <= 0) return;
+            
+            stepInput.disabled = true;
+            feedbackMessage.textContent = 'Saving...';
+            
+            const userDocRef = currentUser === 'user1' ? user1DocRef : user2DocRef;
+            const oldTotal = userData[currentUser].steps;
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const userDoc = await transaction.get(userDocRef);
+                    if (!userDoc.exists()) { throw "Document does not exist!"; }
+                    const newTotal = userDoc.data().steps + steps;
+                    transaction.update(userDocRef, { steps: newTotal });
+                    transaction.set(doc(logsCollectionRef), {
+                        userId: currentUser,
+                        steps: steps,
+                        note: "",
+                        date: Timestamp.now(),
+                    });
+                });
+
+                stepForm.reset();
+                feedbackMessage.textContent = `Added ${steps.toLocaleString()} steps!`;
+                
+                const allUserGoals = getAllGoalsForUser(currentUser);
+                if (allUserGoals.find(g => oldTotal < g.steps && (oldTotal + steps) >= g.steps)) {
+                    confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+                }
+            } catch (error) {
+                console.error("Error adding steps:", error);
+                feedbackMessage.textContent = 'Error saving. Please try again.';
+            } finally {
+                stepInput.disabled = false;
+                setTimeout(() => feedbackMessage.textContent = '', 3000);
+            }
+        }
+        
+        function setupStatsFilter() {
+            const challengeMonths = [
+                { name: 'Oct', value: 9 }, { name: 'Nov', value: 10 }, { name: 'Dec', value: 11 },
+                { name: 'Jan', value: 0 }, { name: 'Feb', value: 1 }, { name: 'Mar', value: 2 },
+                { name: 'Apr', value: 3 }, { name: 'May', value: 4 }, { name: 'Jun', value: 5 },
+                { name: 'Jul', value: 6 }, { name: 'Aug', value: 7 }, { name: 'Sep', value: 8 }
+            ];
+
+            let options = '<option value="all">All</option>';
+            options += challengeMonths.map(m => `<option value="${m.value}">${m.name}</option>`).join('');
+            statsFilter.innerHTML = options;
+
+            statsFilter.addEventListener('change', updateUI);
+        }
+
+        // --- Modal Handlers ---
+        let confirmCallback = null;
+        function showConfirmModal(message, onConfirm) {
+            confirmModalText.textContent = message;
+            confirmCallback = onConfirm;
+            confirmModal.classList.remove('hidden');
+        }
+
+        confirmCancelBtn.addEventListener('click', () => {
+            confirmModal.classList.add('hidden');
+            confirmCallback = null;
+        });
+
+        confirmDeleteBtn.addEventListener('click', () => {
+            if (confirmCallback) {
+                confirmCallback();
+            }
+            confirmModal.classList.add('hidden');
+            confirmCallback = null;
+        });
+        
+        let currentLogIdForNote = null;
+        function handleOpenNoteModal(e) {
+            const button = e.target.closest('.edit-note-btn');
+            if (button) {
+                currentLogIdForNote = button.dataset.logId;
+                noteInput.value = button.dataset.note;
+                noteModal.classList.remove('hidden');
+                noteInput.focus();
+            }
+        }
+        noteCancelBtn.addEventListener('click', () => noteModal.classList.add('hidden'));
+        noteForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentLogIdForNote) return;
+            const logDocRef = doc(logsCollectionRef, currentLogIdForNote);
+            await updateDoc(logDocRef, { note: noteInput.value });
+            noteModal.classList.add('hidden');
+            currentLogIdForNote = null;
+        });
+
+        let currentLogIdForDate = null;
+        function handleOpenDateModal(e) {
+            const button = e.target.closest('.edit-date-btn');
+            if (button) {
+                currentLogIdForDate = button.dataset.logId;
+                dateInput.value = button.dataset.date;
+                dateModal.classList.remove('hidden');
+            }
+        }
+
+        dateCancelBtn.addEventListener('click', () => {
+            dateModal.classList.add('hidden');
+            currentLogIdForDate = null;
+        });
+
+        dateForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentLogIdForDate || !dateInput.value) return;
+            
+            const logDocRef = doc(logsCollectionRef, currentLogIdForDate);
+            const newDate = new Date(dateInput.value + "T12:00:00");
+            
+            try {
+                await updateDoc(logDocRef, { date: Timestamp.fromDate(newDate) });
+            } catch (error) {
+                console.error("Error updating date:", error);
+                feedbackMessage.textContent = 'Failed to update date.';
+                setTimeout(() => { feedbackMessage.textContent = '' }, 3000);
+            } finally {
+                dateModal.classList.add('hidden');
+                currentLogIdForDate = null;
+            }
+        });
+
+        // --- Log Action Handlers (Delegated) ---
+        async function handleDeleteLog(e) {
+            const button = e.target.closest('.delete-log-btn');
+            if (button) {
+                const { logId, steps, userId } = button.dataset;
+                const stepsToDeduct = parseInt(steps, 10);
+
+                const onConfirm = async () => {
+                    const logDocRef = doc(logsCollectionRef, logId);
+                    const userDocRef = userId === 'user1' ? user1DocRef : user2DocRef;
+                    try {
+                        await runTransaction(db, async (transaction) => {
+                             const userDoc = await transaction.get(userDocRef);
+                             if (!userDoc.exists()) { throw "User document not found"; }
+                             const newTotal = Math.max(0, userDoc.data().steps - stepsToDeduct);
+                             transaction.update(userDocRef, { steps: newTotal });
+                             transaction.delete(logDocRef);
+                        });
+                    } catch (error) {
+                        console.error("Error deleting log entry:", error);
+                        feedbackMessage.textContent = 'Failed to delete entry.';
+                        setTimeout(() => { feedbackMessage.textContent = '' }, 3000);
+                    }
+                };
+                
+                showConfirmModal(`Are you sure you want to delete this log of ${stepsToDeduct.toLocaleString()} steps? This cannot be undone.`, onConfirm);
+            }
+        }
+        
+        document.addEventListener('click', (e) => {
+            handleOpenNoteModal(e);
+            handleDeleteLog(e);
+            handleOpenDateModal(e);
+        });
+
+        // Initialisation
+        async function main() {
+             try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) { console.error("Authentication failed", e); }
+            
+            await initializeUserDocs();
+            setupUserSelector();
+            setupStatsFilter();
+            stepForm.addEventListener('submit', handleStepSubmit);
+
+            // --- Real-time Listeners ---
+            onSnapshot(user1DocRef, (doc) => {
+                if(doc.exists()) userData.user1 = { ...userData.user1, ...doc.data() };
+                updateUI();
+            });
+            onSnapshot(user2DocRef, (doc) => {
+                if(doc.exists()) userData.user2 = { ...userData.user2, ...doc.data() };
+                updateUI();
+            });
+            const logsQuery = query(logsCollectionRef, orderBy("date", "desc"));
+            onSnapshot(logsQuery, (snapshot) => {
+                logData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateUI();
+            });
+        }
+
+        main();
+
+    </script>
+</body>
+</html>
