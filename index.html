@@ -15,7 +15,12 @@
         .progress-bar-container {
             height: 60vh;
             min-height: 400px;
-            width: 100px; /* Wider bars */
+            width: 80px; /* Narrower bars for mobile */
+        }
+        @media (min-width: 640px) {
+            .progress-bar-container {
+                width: 100px; /* Wider bars on larger screens */
+            }
         }
         .progress-bar-track {
             background-color: #e0e0e0;
@@ -30,7 +35,6 @@
             transition: height 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
         }
         .milestone {
-            transform: translateX(10px);
             opacity: 0;
             transition: all 0.5s ease-in-out;
         }
@@ -40,7 +44,8 @@
             background-color: #6b7280;
         }
         .milestone-text {
-            white-space: nowrap;
+            /* Allow text to wrap */
+            white-space: normal;
         }
         .milestone.visible {
             opacity: 1;
@@ -95,11 +100,11 @@
 
 
         <!-- Progress Display -->
-        <div class="flex flex-col md:flex-row justify-around items-end gap-12 md:gap-8 px-4">
+        <div class="flex flex-row justify-center items-end gap-2 px-1">
             <!-- User 1 Progress -->
-            <div id="user1-progress" class="flex flex-col items-center w-full md:w-auto"></div>
+            <div id="user1-progress" class="flex flex-col items-center w-auto"></div>
             <!-- User 2 Progress -->
-            <div id="user2-progress" class="flex flex-col items-center w-full md:w-auto"></div>
+            <div id="user2-progress" class="flex flex-col items-center w-auto"></div>
         </div>
 
         <!-- Stats Section -->
@@ -154,7 +159,7 @@
         <!-- Log Section -->
         <div class="mt-12 pt-8 border-t border-gray-200">
             <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Log</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="grid grid-cols-2 gap-4">
                 <div>
                     <h3 class="text-xl font-semibold text-center mb-4">Ant's Log</h3>
                     <div id="user1-log" class="space-y-2 max-h-96 overflow-y-auto pr-2"></div>
@@ -241,7 +246,7 @@
             messagingSenderId: "482552425657",
             appId: "1:482552425657:web:fbbcc6ef15ca4589ad3f68"
         };
-
+		
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'walking-challenge-app';
 
         const app = initializeApp(firebaseConfig);
@@ -310,8 +315,11 @@
             const progressPercent = displayGoal > 0 ? Math.min((user.steps / displayGoal) * 100, 100) : 0;
             const formattedSteps = user.steps.toLocaleString();
             const formattedDisplayGoal = displayGoal.toLocaleString();
-
             const fillClass = userKey === 'user1' ? 'progress-bar-fill-ant' : 'progress-bar-fill-amy';
+            
+            const isAnt = userKey === 'user1';
+            const milestoneContainerPosition = isAnt ? 'right-full' : 'left-full';
+            const milestoneTextAlign = isAnt ? 'text-right' : 'text-left';
 
             container.innerHTML = `
                 <h3 class="text-2xl font-bold mb-3">${user.name}</h3>
@@ -319,7 +327,7 @@
                     <div class="w-full progress-bar-track rounded-full overflow-hidden relative">
                         <div class="${fillClass} w-full absolute bottom-0" style="height: ${progressPercent}%"></div>
                     </div>
-                    <div id="${userKey}-milestones" class="absolute top-0 left-full w-48 h-full"></div>
+                    <div id="${userKey}-milestones" class="absolute top-0 ${milestoneContainerPosition} w-24 sm:w-32 h-full ${milestoneTextAlign}"></div>
                 </div>
                 <div class="text-center mt-3">
                     <p class="text-xl font-semibold">${formattedSteps}</p>
@@ -333,13 +341,23 @@
             const container = document.getElementById(containerId);
             container.innerHTML = '';
             const allMilestones = getAllGoalsForUser(userKey);
+            const isAnt = userKey === 'user1';
+
             allMilestones.forEach(milestone => {
                 const percent = displayGoal > 0 ? (milestone.steps / displayGoal) * 100 : 0;
                 if (percent <= 105) {
                     const milestoneEl = document.createElement('div');
-                    milestoneEl.className = 'milestone absolute flex items-center';
+                    milestoneEl.className = 'milestone absolute flex items-center w-full';
                     milestoneEl.style.bottom = `calc(${percent}% - 8px)`;
-                    milestoneEl.innerHTML = `<div class="milestone-line"></div><span class="milestone-text text-xs text-gray-600 font-medium ml-2">${milestone.label}</span>`;
+                    
+                    if (isAnt) {
+                        milestoneEl.style.transform = 'translateX(-10px)';
+                        milestoneEl.classList.add('justify-end');
+                        milestoneEl.innerHTML = `<span class="milestone-text text-xs text-gray-600 font-medium mr-2">${milestone.label}</span><div class="milestone-line"></div>`;
+                    } else {
+                        milestoneEl.style.transform = 'translateX(10px)';
+                        milestoneEl.innerHTML = `<div class="milestone-line"></div><span class="milestone-text text-xs text-gray-600 font-medium ml-2">${milestone.label}</span>`;
+                    }
                     container.appendChild(milestoneEl);
                 }
             });
@@ -758,3 +776,4 @@
     </script>
 </body>
 </html>
+
