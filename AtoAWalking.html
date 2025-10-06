@@ -233,7 +233,15 @@
         INDIVIDUAL_STRETCH_GOALS.user2 = [{ steps: 1500000, label: "New Pair of Heels!", reward: "👠" }];
         // --- End of Customization ---
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const firebaseConfig = {
+            apiKey: "AIzaSyCjvDHVf3-WEwxRXt2oTKyS3U-DrUeMJ4Q",
+            authDomain: "a-to-a-walking.firebaseapp.com",
+            projectId: "a-to-a-walking",
+            storageBucket: "a-to-a-walking.firebasestorage.app",
+            messagingSenderId: "482552425657",
+            appId: "1:482552425657:web:fbbcc6ef15ca4589ad3f68"
+        };
+
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'walking-challenge-app';
 
         const app = initializeApp(firebaseConfig);
