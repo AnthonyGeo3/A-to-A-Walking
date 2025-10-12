@@ -222,17 +222,83 @@
         // --- ⚙️ CUSTOMIZE YOUR CHALLENGE HERE ⚙️ ---
         const USER_1_NAME = "Ant";
         const USER_2_NAME = "Amy";
-        const MAIN_GOAL = 910000;
-        const MILESTONES = { /* ... milestone data ... */ };
-        const SHARED_STRETCH_GOALS = [ /* ... shared goals ... */ ];
-        const INDIVIDUAL_STRETCH_GOALS = { /* ... individual goals ... */ };
-        // --- NOTE: Collapsed customization for brevity ---
+        const MILESTONES = {};
+        const SHARED_STRETCH_GOALS = [];
+        const INDIVIDUAL_STRETCH_GOALS = {};
+
         MILESTONES.user1 = [
-            { steps: 40000, label: "Wrexham to Nantwich! 🏡" }, { steps: 250000, label: "Quarter Million!" }, { steps: 500000, label: "Half a Mill! 🎉" }, { steps: 750000, label: "So close!" }, { steps: MAIN_GOAL, label: "Paris Bound! ✈️🇫🇷" }
+            { steps: 8073, label: "To Amy's parents! 👋" },
+            { steps: 37063, label: "From Amy's to her parents! 🚶‍♀️" },
+            { steps: 54854, label: "That's a marathon! 🏃‍♂️" },
+            { steps: 130000, label: "Hello Birmingham! 🏙️" },
+            { steps: 156000, label: "1 full day of walking! ☀️🌙" },
+            { steps: 227708, label: "Welcome to Cardiff! 🐉" },
+            { steps: 256100, label: "To my parents' place! 🏠" },
+            { steps: 283335, label: "Top of the mornin', Dublin! 🍀" },
+            { steps: 342212, label: "London calling! 💂" },
+            { steps: 418483, label: "Och aye, Edinburgh! 🏰" },
+            { steps: 480597, label: "Channel Tunnel! 🚇" },
+            { steps: 520000, label: "We've walked to the ISS! 🛰️" },
+            { steps: 537316, label: "Bonjour, Calais! 🇫🇷" },
+            { steps: 616174, label: "Fairytale Bruges! 🏰" },
+            { steps: 700167, label: "Hello Amsterdam! 🚲" },
+            { steps: 731601, label: "Brussels Sprouts! 😄" },
+            { steps: 751023, label: "The outskirts of Paris! 🥐" },
+            { steps: 784043, label: "Eiffel Tower! We made it! 🎉" },
+            { steps: 836859, label: "The Long Walk! 🚶‍♂️👑" },
+            { steps: 954265, label: "Goal! Dortmund! ⚽" },
+            { steps: 1092000, label: "1 whole week of walking! 🗓️" },
+            { steps: 1145118, label: "Paris to Berlin! 🥖🍺" },
+            { steps: 1259557, label: "Length of the UK! 🇬🇧" },
+            { steps: 1365312, label: "Wonderful Copenhagen! 🧜‍♀️" },
+            { steps: 1434914, label: "We're in Berlin! 🐻" },
+            { steps: 1480427, label: "Greetings from Oslo! 🇳🇴" },
+            { steps: 1595568, label: "Fashion capital Milan! 🇮🇹" },
+            { steps: 1716000, label: "£100M in tenners, laid end to end! 💰" },
+            { steps: 1761643, label: "Hola, Barcelona! ☀️" },
+            { steps: 1913990, label: "Florence, city of art! 🎨" },
+            { steps: 2206035, label: "When in Rome... 🏛️" },
+            { steps: 3437785, label: "Ancient Athens! 🇬🇷" },
+            { steps: 3766100, label: "Shire to Mordor! 🌋" },
+            { steps: 4469179, label: "Paphos, Cyprus! 🇨🇾" },
         ];
         MILESTONES.user2 = [
-            { steps: 40000, label: "Nantwich to Wrexham! 🏡" }, { steps: 250000, label: "A quarter of a million!" }, { steps: 500000, label: "Halfway there! 🎉" }, { steps: 750000, label: "The final stretch!" }, { steps: MAIN_GOAL, label: "Paris, here we come! ✈️🇫🇷" }
+            { steps: 8073, label: "Ants' to my parents' house! ❤️" },
+            { steps: 37063, label: "Visiting my parents! 🏡" },
+            { steps: 54854, label: "Marathon complete! ✅" },
+            { steps: 130000, label: "Reached Birmingham! ✨" },
+            { steps: 156000, label: "24 hours on our feet! 👣" },
+            { steps: 227708, label: "Made it to Cardiff! 🏴󠁧󠁢󠁷󠁬󠁳󠁿" },
+            { steps: 256100, label: "Visiting Ant's parents! 👋" },
+            { steps: 283335, label: "Hello Dublin! 🇮🇪" },
+            { steps: 342212, label: "We've reached London townnn! 🇬🇧" },
+            { steps: 418483, label: "Hello from Edinburgh! 🏴󠁧󠁢󠁳󠁣󠁴󠁿" },
+            { steps: 480597, label: "Crossing the channel! 🌊" },
+            { steps: 520000, label: "Up to the ISS! 🌍" },
+            { steps: 537316, label: "First stop in France! ✨" },
+            { steps: 616174, label: "In Bruges! 🇧🇪" },
+            { steps: 700167, label: "Greetings from Amsterdam! 🇳🇱" },
+            { steps: 731601, label: "Made it to Brussels! 🇧🇪" },
+            { steps: 751023, label: "Almost there! Paris border! 🗼" },
+            { steps: 784043, label: "Paris is ours! 🇫🇷❤️" },
+            { steps: 836859, label: "The Long Walk! 🎞️" },
+            { steps: 954265, label: "Hello Dortmund! 🇩🇪" },
+            { steps: 1092000, label: "7 days straight walking! 🏅" },
+            { steps: 1145118, label: "From Paris to Berlin! 🕺" },
+            { steps: 1259557, label: "John o' Groats to Land's End! 💪" },
+            { steps: 1365312, label: "Hello Denmark! 🇩🇰" },
+            { steps: 1434914, label: "Reached Berlin! 🇩🇪" },
+            { steps: 1480427, label: "Hello Norway! 🏔️" },
+            { steps: 1595568, label: "Ciao, Milano! 🛍️" },
+            { steps: 1716000, label: "That's a lot of money! 💸" },
+            { steps: 1761643, label: "Beautiful Barcelona! 🇪🇸" },
+            { steps: 1913990, label: "Hello, Firenze! 🇮🇹" },
+            { steps: 2206035, label: "All roads lead to Rome! 🇮🇹" },
+            { steps: 3437785, label: "Greetings from Athens! ✨" },
+            { steps: 3766100, label: "One does not simply walk into Mordor... but we did! 👣" },
+            { steps: 4469179, label: "Sunshine in Paphos! ☀️" },
         ];
+
         SHARED_STRETCH_GOALS.push({ steps: 1000000, label: "Book Disneyland Paris!", reward: "🏰🐭" });
         INDIVIDUAL_STRETCH_GOALS.user1 = [{ steps: 1500000, label: "New Graphics Card!", reward: "💻" }];
         INDIVIDUAL_STRETCH_GOALS.user2 = [{ steps: 1500000, label: "New Pair of Heels!", reward: "👠" }];
@@ -776,4 +842,3 @@
     </script>
 </body>
 </html>
-
