@@ -53,6 +53,26 @@
         .milestone.visible {
             opacity: 1;
         }
+        /* New style for passed milestones */
+        .milestone.passed {
+            opacity: 0.5; /* Fade out passed milestones but keep readable */
+        }
+        .milestone.passed .milestone-text {
+            /* display: none;  <-- REMOVED: Keep text visible */
+            font-size: 0.6rem; /* Shrink text for passed milestones */
+            line-height: 1;
+        }
+        /* Peer milestone style */
+        .milestone.peer {
+            opacity: 1 !important; /* Always visible */
+            z-index: 10; /* On top of others */
+        }
+        .milestone.peer .milestone-line {
+            height: 3px; /* Slightly thicker */
+        }
+        .milestone.peer .milestone-text {
+            font-weight: bold;
+        }
         .stretch-goal-card {
             transition: all 0.5s ease;
             border-left-width: 4px;
@@ -271,10 +291,10 @@
 
         MILESTONES.user1 = [
             { steps: 8073, label: "To Amy's parents! 👋" },
-            { steps: 37063, label: "From Amy's to her parents! 🚶‍♀️" },
+            { steps: 37063, label: "Amy's long walk to her parents! 🚶‍♀️" },
             { steps: 54854, label: "That's a marathon! 🏃‍♂️" },
             { steps: 130000, label: "Hello Birmingham! 🏙️" },
-            { steps: 156000, label: "1 full day of walking! ☀️🌙" },
+            { steps: 156000, label: "A full day of walking! ☀️🌙" },
             { steps: 227708, label: "Welcome to Cardiff! 🐉" },
             { steps: 256100, label: "To my parents' place! 🏠" },
             { steps: 283335, label: "Top of the mornin', Dublin! 🍀" },
@@ -290,7 +310,7 @@
             { steps: 784043, label: "Eiffel Tower! We made it! 🎉" },
             { steps: 836859, label: "The Long Walk! 🚶‍♂️👑" },
             { steps: 954265, label: "Goal! Dortmund! ⚽" },
-            { steps: 1092000, label: "1 whole week of walking! 🗓️" },
+            { steps: 1092000, label: "A whole week of walking! 🗓️" },
             { steps: 1145118, label: "Paris to Berlin! 🥖🍺" },
             { steps: 1259557, label: "Length of the UK! 🇬🇧" },
             { steps: 1365312, label: "Wonderful Copenhagen! 🧜‍♀️" },
@@ -432,6 +452,9 @@
 
         function renderProgress(containerId, userKey) {
             const user = userData[userKey];
+            const otherUserKey = userKey === 'user1' ? 'user2' : 'user1';
+            const otherUser = userData[otherUserKey];
+            
             const container = document.getElementById(containerId);
             const allUserGoals = getAllGoalsForUser(userKey);
             const nextGoal = allUserGoals.find(g => user.steps < g.steps) || allUserGoals[allUserGoals.length - 1] || { steps: 784043 }; // Fallback to Eiffel Tower
@@ -444,18 +467,45 @@
             const isAnt = userKey === 'user1';
             const milestoneContainerPosition = isAnt ? 'right-full' : 'left-full';
             const milestoneTextAlign = isAnt ? 'text-right' : 'text-left';
+            
+            const diffSteps = Math.max(0, displayGoal - user.steps).toLocaleString();
+
+            // Peer progress calculation
+            const peerPercent = displayGoal > 0 ? Math.min((otherUser.steps / displayGoal) * 100, 100) : 0;
+            // Peer color logic: if rendering Ant's bar, show Amy (purple) peer marker. If Amy's, show Ant (green).
+            const peerColorClass = isAnt ? 'text-purple-600' : 'text-green-600';
+            const peerBgClass = isAnt ? 'bg-purple-600' : 'bg-green-600';
+            const peerName = isAnt ? USER_2_NAME : USER_1_NAME;
+            
+            // Peer marker HTML
+            // Position: bottom percent. 
+            // If Ant's bar, marker goes on LEFT (inside bar? or edge?). 
+            // Let's put it slightly overlapping the bar on the side opposite the text? 
+            // Actually, standard milestones are outside. Let's put the peer marker ON the bar or right on the edge.
+            // Let's put it strictly ON the bar line, maybe a line across or a dot.
+            // "on Amys side there would be a green milestone that says Ant" -> implies separate marker.
+            // Let's position it inside the bar track but visible.
+            
+            const peerMarkerHtml = `
+                <div class="absolute w-full flex items-center ${isAnt ? 'justify-start' : 'justify-end'}" style="bottom: calc(${peerPercent}% - 10px); z-index: 20;">
+                     <div class="${peerBgClass} text-white text-[10px] font-bold px-1 py-0.5 rounded shadow-sm flex items-center">
+                        ${isAnt ? '◄ ' + peerName : peerName + ' ►'}
+                     </div>
+                </div>
+            `;
 
             container.innerHTML = `
                 <h3 class="text-2xl font-bold mb-3">${user.name}</h3>
                 <div class="relative progress-bar-container flex justify-center">
                     <div class="w-full progress-bar-track rounded-full overflow-hidden relative">
                         <div class="${fillClass} w-full absolute bottom-0" style="height: ${progressPercent}%"></div>
+                        ${peerMarkerHtml}
                     </div>
                     <div id="${userKey}-milestones" class="absolute top-0 ${milestoneContainerPosition} w-24 sm:w-32 h-full ${milestoneTextAlign}"></div>
                 </div>
                 <div class="text-center mt-3">
                     <p class="text-xl font-semibold">${formattedSteps}</p>
-                    <p class="text-sm text-gray-500">/ ${formattedDisplayGoal}</p>
+                    <p class="text-sm text-gray-500">/ ${formattedDisplayGoal} <br>(${diffSteps} to go)</p>
                 </div>
             `;
             renderMilestones(`${userKey}-milestones`, displayGoal, userKey);
@@ -466,12 +516,15 @@
             container.innerHTML = '';
             const allMilestones = getAllGoalsForUser(userKey);
             const isAnt = userKey === 'user1';
+            const user = userData[userKey];
 
             allMilestones.forEach(milestone => {
                 const percent = displayGoal > 0 ? (milestone.steps / displayGoal) * 100 : 0;
+                const isPassed = user.steps >= milestone.steps;
+                
                 if (percent <= 105) {
                     const milestoneEl = document.createElement('div');
-                    milestoneEl.className = 'milestone absolute flex items-center w-full';
+                    milestoneEl.className = `milestone absolute flex items-center w-full ${isPassed ? 'passed' : ''}`;
                     milestoneEl.style.bottom = `calc(${percent}% - 8px)`;
                     
                     if (isAnt) {
@@ -680,17 +733,27 @@
 
                     const currentMonth = today.getMonth();
                     const currentYear = today.getFullYear();
+                    
+                    // To calculate predicted total for a month:
+                    // 1. Calculate average per day SO FAR in that month.
+                    // 2. Multiply by TOTAL days in that month.
+
+                    let daysInMonth = new Date(year, selectedMonth + 1, 0).getDate();
+                    multiplier = daysInMonth;
 
                     if (selectedMonth === currentMonth && year === currentYear) {
-                        divisor = today.getDate();
+                        divisor = today.getDate(); // Divide by days passed so far
                     } else {
-                        divisor = new Date(year, selectedMonth + 1, 0).getDate();
+                        // For a past month, divisor is total days (so avg is accurate for past)
+                        // and multiplier is also total days (so predicted = actual total)
+                        divisor = daysInMonth; 
                     }
-                    multiplier = divisor; // For monthly, multiplier is just the number of days in that month
                 }
                 
                 divisor = Math.max(1, divisor); // Prevent division by zero
                 averageSteps = totalSteps / divisor;
+                
+                // Predicted steps = Average daily steps * Total days in period
                 const predictedSteps = averageSteps * multiplier;
 
                 const avgTarget = userKey === 'user1' ? user1AvgSteps : user2AvgSteps;
