@@ -7,308 +7,249 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <!-- Leaflet Map Library -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
+        
+        /* Horizontal Bar Styles */
         .progress-bar-track {
             background-color: #e0e0e0;
-            border: 2px solid #d1d5db;
-            height: 48px;
-            border-radius: 9999px;
+            border: 1px solid #d1d5db;
+            height: 40px;
+            border-radius: 99px;
             position: relative;
+            overflow: visible;
         }
         .progress-bar-fill-ant {
             background: linear-gradient(to right, #4ade80, #34d399);
-            transition: width 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+            transition: width 0.8s ease;
             height: 100%;
-            border-radius: 9999px;
+            border-radius: 99px;
         }
         .progress-bar-fill-amy {
             background: linear-gradient(to right, #a855f7, #9333ea);
-            transition: width 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+            transition: width 0.8s ease;
             height: 100%;
-            border-radius: 9999px;
+            border-radius: 99px;
         }
         .peer-marker {
             position: absolute;
-            top: -8px;
-            transform: translateX(-50%);
-            transition: left 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
-            z-index: 10;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            transition: left 0.8s ease;
+            z-index: 20; /* Higher z-index to stay on top */
+            width: 0; 
+            height: 0; 
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
         }
+        /* Triangle pointing up from bottom */
+        .peer-marker.bottom {
+            border-bottom-width: 12px;
+            border-bottom-style: solid;
+            top: auto;
+            bottom: -6px;
+            transform: translateX(-50%);
+        }
+
+        /* Passport Styles - Circular Stamps */
         .passport-bg {
             background-color: #fdf6e3;
             background-image: radial-gradient(#d3c9b1 0.5px, transparent 0.5px);
             background-size: 20px 20px;
-            border: 2px solid #d3c9b1;
+            border: 4px double #d3c9b1;
+            min-height: 150px;
         }
         .stamp {
-            border: 3px double #8b7355;
-            background: rgba(255, 255, 255, 0.5);
-            transition: all 0.3s ease;
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            border: 3px double #8b7355; /* Ink color */
+            background: rgba(255, 255, 255, 0.7); /* Slightly opaque to standout on paper */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8px;
+            margin: auto;
+            transition: transform 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
-        .log-entry {
-            transition: background-color 0.2s ease-in-out;
+        .stamp:hover {
+            transform: scale(1.1) !important;
+            z-index: 20;
+            background: white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        #map {
-            z-index: 1;
-        }
+        .stamp:nth-child(3n+1) { transform: rotate(-4deg); }
+        .stamp:nth-child(3n+2) { transform: rotate(3deg); }
+        .stamp:nth-child(3n+3) { transform: rotate(-2deg); }
+
+        .log-entry { transition: background 0.2s; }
+        .log-entry:hover { background-color: #f9fafb; }
+        #map { z-index: 1; }
+        
+        /* Map Marker Colors via CSS Filter */
+        .marker-icon-ant { filter: hue-rotate(260deg) saturate(3) brightness(0.8); } /* Green-ish shift */
+        .marker-icon-amy { filter: hue-rotate(420deg) saturate(2) brightness(0.9); } /* Purple-ish shift */
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-2 sm:p-4">
 
-    <div class="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-4 sm:p-8">
+    <div class="w-full max-w-3xl mx-auto bg-white rounded-2xl shadow-lg p-4 sm:p-6">
 
-        <!-- Header -->
         <div class="text-center mb-6">
-            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">A to A Walking!</h1>
-            <p class="text-gray-500 mt-2 italic">Est. Oct 25</p>
+            <h1 class="text-3xl font-bold text-gray-800">A to A Walking!</h1>
+            <p class="text-gray-500 text-sm">Est. Oct 25</p>
         </div>
 
-        <!-- Log Steps Section -->
-        <div class="bg-gray-50 p-4 sm:p-6 rounded-xl shadow-inner mb-8">
-            <h2 class="text-lg font-semibold text-center mb-4">Log Daily Steps</h2>
-            <div class="flex justify-center gap-4 mb-4" id="user-selector"></div>
-            <form id="step-form" class="hidden flex flex-col sm:flex-row items-center justify-center gap-3">
-                <input type="number" id="step-input" placeholder="0 steps" class="w-full sm:w-48 text-center p-3 border border-gray-300 rounded-lg focus:border-transparent transition" required min="1">
-                <button type="submit" class="w-full sm:w-auto text-white font-bold py-3 px-6 rounded-lg transition-all shadow-md active:scale-95">
-                    Add Steps
-                </button>
+        <!-- Input Section -->
+        <div class="bg-gray-50 p-4 rounded-xl shadow-inner mb-8">
+            <h2 class="text-lg font-semibold text-center mb-3">Log Steps</h2>
+            <div class="flex justify-center gap-4 mb-3" id="user-selector"></div>
+            <form id="step-form" class="hidden flex flex-col sm:flex-row items-center justify-center gap-2">
+                <input type="number" id="step-input" placeholder="0" class="w-24 text-center p-2 border rounded-lg" required min="1">
+                <button type="submit" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Add</button>
             </form>
-            <p id="feedback-message" class="text-center text-green-600 font-medium mt-3 h-5"></p>
+            <p id="feedback-message" class="text-center text-green-600 text-sm mt-2 h-4"></p>
         </div>
 
-        <!-- Progress Bars Section -->
-        <div class="space-y-8 mb-10 px-2">
-            <!-- Ant's Row -->
-            <div id="ant-progress-row" class="w-full">
-                <!-- Content generated by JS -->
-            </div>
-            <!-- Amy's Row -->
-            <div id="amy-progress-row" class="w-full">
-                <!-- Content generated by JS -->
-            </div>
+        <!-- Horizontal Progress Bars -->
+        <div class="space-y-6 mb-8">
+            <div id="ant-progress-row"></div>
+            <div id="amy-progress-row"></div>
         </div>
 
-        <!-- Stats Section -->
-        <div class="mt-8 pt-8 border-t border-gray-200">
-            <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h2 class="text-2xl font-bold text-gray-700">Stats</h2>
-                <select id="stats-filter" class="p-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 w-full sm:w-auto">
-                </select>
+        <!-- Stats -->
+        <div class="border-t pt-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-700">Stats</h2>
+                <select id="stats-filter" class="p-1 border rounded text-sm"></select>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
-                <!-- Ant Stats -->
-                <div class="bg-green-50 p-3 rounded-lg border border-green-100">
-                    <p class="text-[10px] uppercase tracking-wider text-green-700 font-bold mb-2">Ant</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <p class="text-xs text-gray-500">Average</p>
-                            <p id="user1-avg-steps" class="text-lg font-bold text-green-600">0</p>
-                        </div>
-                        <div>
-                            <p class="text-xs text-gray-500">Predicted</p>
-                            <p id="user1-predicted-steps" class="text-lg font-bold text-green-600">0</p>
-                        </div>
-                    </div>
+            <div class="grid grid-cols-2 gap-4 text-center">
+                <div class="bg-green-50 p-2 rounded border border-green-100">
+                    <p class="text-[10px] uppercase font-bold text-green-700">Ant Avg / Pred</p>
+                    <p class="text-green-600 font-bold"><span id="user1-avg-steps">0</span> / <span id="user1-predicted-steps">0</span></p>
                 </div>
-                <!-- Amy Stats -->
-                <div class="bg-purple-50 p-3 rounded-lg border border-purple-100">
-                    <p class="text-[10px] uppercase tracking-wider text-purple-700 font-bold mb-2">Amy</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <p class="text-xs text-gray-500">Average</p>
-                            <p id="user2-avg-steps" class="text-lg font-bold text-purple-600">0</p>
-                        </div>
-                        <div>
-                            <p class="text-xs text-gray-500">Predicted</p>
-                            <p id="user2-predicted-steps" class="text-lg font-bold text-purple-600">0</p>
-                        </div>
-                    </div>
+                <div class="bg-purple-50 p-2 rounded border border-purple-100">
+                    <p class="text-[10px] uppercase font-bold text-purple-700">Amy Avg / Pred</p>
+                    <p class="text-purple-600 font-bold"><span id="user2-avg-steps">0</span> / <span id="user2-predicted-steps">0</span></p>
                 </div>
             </div>
         </div>
 
-        <!-- Passport Section -->
-        <div class="mt-12 pt-8 border-t border-gray-200">
-            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6 flex items-center justify-center gap-2">
-                <span>🛂</span> Passport
-            </h2>
-            <div id="passport-container" class="passport-bg rounded-2xl p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[100px]">
-                <!-- Stamps injected here -->
+        <!-- Passport -->
+        <div class="border-t pt-6 mb-8">
+            <h2 class="text-xl font-bold text-center text-gray-700 mb-4">🛂 Milestone Passport</h2>
+            <div id="passport-container" class="passport-bg rounded-xl p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                <!-- Stamps go here -->
             </div>
         </div>
 
-        <!-- Stretch Goals Section -->
-        <div class="mt-12 pt-8 border-t border-gray-200">
-            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Stretch Goals</h2>
-            <div id="stretch-goals-container" class="space-y-4"></div>
+        <!-- Stretch Goals -->
+        <div class="border-t pt-6 mb-8">
+            <h2 class="text-xl font-bold text-center mb-4">Stretch Goals</h2>
+            <div id="stretch-goals-container" class="space-y-3"></div>
         </div>
 
-        <!-- High Score Section -->
-        <div class="mt-12 pt-8 border-t border-gray-200">
-            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">High Scores</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <h3 class="text-xl font-semibold text-center mb-4">Ant's Best Day</h3>
-                    <div id="user1-highscore">
-                        <!-- High score for user 1 will be injected here -->
-                    </div>
-                </div>
-                <div>
-                    <h3 class="text-xl font-semibold text-center mb-4">Amy's Best Day</h3>
-                    <div id="user2-highscore">
-                        <!-- High score for user 2 will be injected here -->
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Log Section -->
-        <div class="mt-12 pt-8 border-t border-gray-200">
-            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Daily Log</h2>
-            <div class="grid grid-cols-2 gap-2 sm:gap-4">
-                <div>
-                    <h3 class="text-sm font-bold text-center mb-4 text-green-700 bg-green-100 py-1 rounded">Ant</h3>
-                    <div id="user1-log" class="space-y-2 max-h-96 overflow-y-auto"></div>
-                </div>
-                <div>
-                    <h3 class="text-sm font-bold text-center mb-4 text-purple-700 bg-purple-100 py-1 rounded">Amy</h3>
-                    <div id="user2-log" class="space-y-2 max-h-96 overflow-y-auto"></div>
-                </div>
+        <!-- High Scores -->
+        <div class="border-t pt-6 mb-8">
+            <h2 class="text-xl font-bold text-center mb-4">Best Days 🏆</h2>
+            <div class="grid grid-cols-2 gap-4" id="highscore-container">
+                <div id="user1-highscore"></div>
+                <div id="user2-highscore"></div>
             </div>
         </div>
 
-        <!-- Map Section -->
-        <div class="mt-12 pt-8 border-t border-gray-200">
-            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Our Journey</h2>
-            <div id="map" class="h-64 sm:h-96 w-full rounded-lg shadow-md"></div>
-        </div>
-    </div>
-    
-    <!-- Modals -->
-    <div id="note-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md relative">
-            <h3 class="text-2xl font-bold text-gray-800 mb-4">Add a Note</h3>
-            <form id="note-form">
-                <textarea id="note-input" maxlength="150" class="w-full p-2 border border-gray-300 rounded-lg h-24 resize-none" placeholder="Details..."></textarea>
-                <div class="flex justify-end gap-3 mt-4">
-                    <button type="button" id="note-cancel" class="bg-gray-200 p-2 rounded-lg">Cancel</button>
-                    <button type="submit" class="bg-green-500 text-white p-2 rounded-lg font-bold">Save</button>
-                </div>
-            </form>
+        <!-- Logs & Map -->
+        <div class="border-t pt-6">
+            <h2 class="text-xl font-bold text-center mb-4">Log & Map</h2>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div id="user1-log" class="max-h-64 overflow-y-auto space-y-2"></div>
+                <div id="user2-log" class="max-h-64 overflow-y-auto space-y-2"></div>
+            </div>
+            <div id="map" class="h-64 rounded-lg shadow-md"></div>
         </div>
     </div>
 
-    <div id="date-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm relative">
-            <h3 class="text-2xl font-bold text-gray-800 mb-4">Change Date</h3>
-            <form id="date-form">
-                <input type="date" id="date-input" class="w-full p-2 border border-gray-300 rounded-lg">
-                <div class="flex justify-end gap-3 mt-4">
-                    <button type="button" id="date-cancel" class="bg-gray-200 p-2 rounded-lg">Cancel</button>
-                    <button type="submit" class="bg-green-500 text-white p-2 rounded-lg font-bold">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <div id="location-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md relative">
-            <h3 class="text-2xl font-bold text-gray-800 mb-4">Add Location</h3>
-            <p class="text-sm text-gray-500 mb-4">Enter a place name, like "Snowdon Summit" or a postcode.</p>
-            <form id="location-form">
-                <input id="location-input" class="w-full p-2 border border-gray-300 rounded-lg" placeholder="e.g., Eiffel Tower">
-                <div class="flex justify-end gap-3 mt-4">
-                    <button type="button" id="location-cancel" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
-                    <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Search & Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div id="confirm-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm relative text-center">
-            <h3 class="text-xl font-bold text-gray-800 mb-4">Are you sure?</h3>
-            <p id="confirm-modal-text" class="text-gray-600 mb-6"></p>
-            <div class="flex justify-center gap-4">
-                <button id="confirm-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg">Cancel</button>
-                <button id="confirm-delete-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg">Delete</button>
+    <!-- Modals (Simplified markup) -->
+    <div id="modal-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl p-6 w-full max-w-sm relative">
+            <h3 id="modal-title" class="text-lg font-bold mb-3"></h3>
+            <div id="modal-content"></div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="modal-cancel" class="bg-gray-200 px-4 py-2 rounded">Cancel</button>
+                <button id="modal-confirm" class="bg-blue-500 text-white px-4 py-2 rounded">Save</button>
             </div>
         </div>
     </div>
 
-
-    <!-- Firebase and App Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, deleteDoc, query, where, orderBy, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         // --- ⚙️ CHALLENGE DATA ---
         const USER_1_NAME = "Ant";
         const USER_2_NAME = "Amy";
         
-        // Combined Milestone List for Passport Logic
-        // We'll use this to check which stamps to show
         const MASTER_MILESTONES = [
-            { steps: 8073, label: "To the In-laws! 🏡" },
-            { steps: 37063, label: "Long parental trek! 🚶‍♂️" },
-            { steps: 54854, label: "The Marathon! 🏃‍♀️" },
-            { steps: 130000, label: "Birmingham! 🏙️" },
-            { steps: 156000, label: "The 24h Walk! 🌙" },
-            { steps: 227708, label: "Cardiff Reached! 🐉" },
-            { steps: 283335, label: "Dublin crossing! 🍀" },
-            { steps: 342212, label: "London Town! 💂" },
-            { steps: 418483, label: "Edinburgh Castle! 🏰" },
-            { steps: 480597, label: "Channel Tunnel! 🚇" },
-            { steps: 520000, label: "Reached the ISS! 🛰️" },
-            { steps: 537316, label: "Bienvenue à Calais! 🇫🇷" },
-            { steps: 616174, label: "Bruges Market! 🏰" },
-            { steps: 700167, label: "Amsterdam Canals! 🚲" },
-            { steps: 731601, label: "Brussels Base! 🇧🇪" },
-            { steps: 751023, label: "Paris Border! 🗼" },
-            { steps: 784043, label: "Eiffel Tower! 🎉" },
-            { steps: 836859, label: "The Long Walk! 🎞️" },
-            { steps: 954265, label: "Dortmund Goal! ⚽" }
+            { steps: 8073, label: "Amy's Parents 🏡", description: "Ants' to my parents' house! ❤️" }, 
+            { steps: 37063, label: "Long Trek 🚶‍♂️", description: "Amy's long walk to her parents! 🚶‍♀️" }, 
+            { steps: 54854, label: "Marathon 🏃‍♀️", description: "That's a marathon! 🏃‍♂️" },
+            { steps: 130000, label: "Birmingham 🏙️", description: "Hello Birmingham! 🏙️" }, 
+            { steps: 156000, label: "24h Walk 🌙", description: "A full day of walking! ☀️🌙" }, 
+            { steps: 227708, label: "Cardiff 🐉", description: "Welcome to Cardiff! 🐉" },
+            { steps: 256100, label: "Ant's Parents 🏠", description: "To my parents' place! 🏠" }, 
+            { steps: 283335, label: "Dublin 🍀", description: "Top of the mornin', Dublin! 🍀" }, 
+            { steps: 342212, label: "London 💂", description: "London calling! 💂" },
+            { steps: 418483, label: "Edinburgh 🏰", description: "Och aye, Edinburgh! 🏰" }, 
+            { steps: 480597, label: "Chunnel 🚇", description: "Channel Tunnel! 🚇" }, 
+            { steps: 520000, label: "ISS 🛰️", description: "We've walked to the ISS! 🛰️" },
+            { steps: 537316, label: "Calais 🇫🇷", description: "Bonjour, Calais! 🇫🇷" }, 
+            { steps: 616174, label: "Bruges 🏰", description: "Fairytale Bruges! 🏰" }, 
+            { steps: 700167, label: "Amsterdam 🚲", description: "Hello Amsterdam! 🚲" },
+            { steps: 731601, label: "Brussels 🇧🇪", description: "Brussels Sprouts! 😄" }, 
+            { steps: 751023, label: "Paris Border 🗼", description: "The outskirts of Paris! 🥐" }, 
+            { steps: 784043, label: "Eiffel Tower! 🎉", description: "Eiffel Tower! We made it! 🎉" },
+            { steps: 836859, label: "Long Walk 🎞️", description: "The Long Walk! 🚶‍♂️👑" }, 
+            { steps: 954265, label: "Dortmund ⚽", description: "Goal! Dortmund! ⚽" }, 
+            { steps: 1092000, label: "Week Walk 🗓️", description: "A whole week of walking! 🗓️" },
+            { steps: 1145118, label: "Berlin 🐻", description: "Paris to Berlin! 🥖🍺" }, 
+            { steps: 1259557, label: "UK Length 🇬🇧", description: "Length of the UK! 🇬🇧" }, 
+            { steps: 1365312, label: "Copenhagen 🧜‍♀️", description: "Wonderful Copenhagen! 🧜‍♀️" },
+            { steps: 1480427, label: "Oslo 🇳🇴", description: "Greetings from Oslo! 🇳🇴" }, 
+            { steps: 1595568, label: "Milan 🇮🇹", description: "Fashion capital Milan! 🇮🇹" }, 
+            { steps: 1716000, label: "£100M Line 💰", description: "£100M in tenners, laid end to end! 💰" },
+            { steps: 1761643, label: "Barcelona ☀️", description: "Hola, Barcelona! ☀️" }, 
+            { steps: 1913990, label: "Florence 🎨", description: "Florence, city of art! 🎨" }, 
+            { steps: 2206035, label: "Rome 🏛️", description: "When in Rome... 🏛️" },
+            { steps: 3437785, label: "Athens 🇬🇷", description: "Ancient Athens! 🇬🇷" }, 
+            { steps: 3766100, label: "Mordor 🌋", description: "Shire to Mordor! 🌋" }, 
+            { steps: 4469179, label: "Paphos 🇨🇾", description: "Paphos, Cyprus! 🇨🇾" }
         ];
+        const SHARED_STRETCH = [{ steps: 1000000, label: "Disneyland!", reward: "🏰" }];
+        const INDIVIDUAL_STRETCH = { user1: [{ steps: 1500000, label: "GPU", reward: "💻" }], user2: [{ steps: 1500000, label: "Heels", reward: "👠" }] };
 
-        const SHARED_STRETCH_GOALS = [{ steps: 1000000, label: "Book Disneyland Paris!", reward: "🏰🐭" }];
-        const INDIVIDUAL_STRETCH_GOALS = {
-            user1: [{ steps: 1500000, label: "New Graphics Card!", reward: "💻" }],
-            user2: [{ steps: 1500000, label: "New Pair of Heels!", reward: "👠" }]
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyCjvDHVf3-WEwxRXt2oTKyS3U-DrUeMJ4Q", authDomain: "a-to-a-walking.firebaseapp.com", projectId: "a-to-a-walking",
+            storageBucket: "a-to-a-walking.firebasestorage.app", messagingSenderId: "482552425657", appId: "1:482552425657:web:fbbcc6ef15ca4589ad3f68"
         };
-
-        const firebaseConfig = typeof __firebase_config !== 'undefined'
-            ? JSON.parse(__firebase_config)
-            : {
-                apiKey: "AIzaSyCjvDHVf3-WEwxRXt2oTKyS3U-DrUeMJ4Q",
-                authDomain: "a-to-a-walking.firebaseapp.com",
-                projectId: "a-to-a-walking",
-                storageBucket: "a-to-a-walking.firebasestorage.app",
-                messagingSenderId: "482552425657",
-                appId: "1:482552425657:web:fbbcc6ef15ca4589ad3f68"
-              };
-		
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'walking-challenge-app';
-
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
-        
-        // --- Firestore References (MOVED HERE to avoid ReferenceError) ---
+
+        // Firestore References
         const publicDataCollection = collection(db, 'artifacts', appId, 'public', 'data', 'challengeData');
         const user1DocRef = doc(publicDataCollection, 'user1');
         const user2DocRef = doc(publicDataCollection, 'user2');
         const logsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'challengeLogs');
 
         let currentUser = null;
-        let userData = { user1: { name: USER_1_NAME, steps: 0 }, user2: { name: USER_2_NAME, steps: 0 }};
+        let userData = { user1: { name: "Ant", steps: 0 }, user2: { name: "Amy", steps: 0 } };
         let logData = [];
         let map = null;
         let markers = null;
@@ -323,53 +264,31 @@
         const user2LogContainer = document.getElementById('user2-log');
         const user1HighScoreContainer = document.getElementById('user1-highscore');
         const user2HighScoreContainer = document.getElementById('user2-highscore');
-        
-        const noteModal = document.getElementById('note-modal');
-        const noteForm = document.getElementById('note-form');
-        const noteInput = document.getElementById('note-input');
-        const noteCancelBtn = document.getElementById('note-cancel');
-        
-        const locationModal = document.getElementById('location-modal');
-        const locationForm = document.getElementById('location-form');
-        const locationInput = document.getElementById('location-input');
-        const locationCancelBtn = document.getElementById('location-cancel');
-        
-        const confirmModal = document.getElementById('confirm-modal');
-        const confirmModalText = document.getElementById('confirm-modal-text');
-        const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
-        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
-        
-        const dateModal = document.getElementById('date-modal');
-        const dateForm = document.getElementById('date-form');
-        const dateInput = document.getElementById('date-input');
-        const dateCancelBtn = document.getElementById('date-cancel');
-        
         const user1AvgSteps = document.getElementById('user1-avg-steps');
         const user2AvgSteps = document.getElementById('user2-avg-steps');
         const user1PredictedSteps = document.getElementById('user1-predicted-steps');
         const user2PredictedSteps = document.getElementById('user2-predicted-steps');
-        
+
         // --- Logic ---
 
         async function initializeUserDocs() {
             try {
-                const [user1Doc, user2Doc] = await Promise.all([getDoc(user1DocRef), getDoc(user2DocRef)]);
-                if (!user1Doc.exists()) await setDoc(user1DocRef, { name: USER_1_NAME, steps: 0 });
-                if (!user2Doc.exists()) await setDoc(user2DocRef, { name: USER_2_NAME, steps: 0 });
-            } catch (error) { console.error("Error initializing user documents:", error); }
+                const [u1, u2] = await Promise.all([getDoc(user1DocRef), getDoc(user2DocRef)]);
+                if (!u1.exists()) await setDoc(user1DocRef, { name: "Ant", steps: 0 });
+                if (!u2.exists()) await setDoc(user2DocRef, { name: "Amy", steps: 0 });
+            } catch (e) { console.error(e); }
         }
         
         function getAllGoalsForUser(userKey) {
-            // FIXED: Use MASTER_MILESTONES instead of undefined MILESTONES
             const userMilestones = MASTER_MILESTONES;
             const userStretchGoals = INDIVIDUAL_STRETCH_GOALS[userKey] || [];
-            return [...userMilestones, ...SHARED_STRETCH_GOALS, ...userStretchGoals].sort((a, b) => a.steps - b.steps);
+            return [...userMilestones, ...SHARED_STRETCH, ...userStretchGoals].sort((a, b) => a.steps - b.steps);
         }
 
         // --- Render Helpers ---
 
         function getNextGoal(steps) {
-            const allGoals = [...MASTER_MILESTONES, ...SHARED_STRETCH_GOALS].sort((a,b) => a.steps - b.steps);
+            const allGoals = [...MASTER_MILESTONES, ...SHARED_STRETCH].sort((a,b) => a.steps - b.steps);
             return allGoals.find(g => steps < g.steps) || allGoals[allGoals.length-1];
         }
 
@@ -377,20 +296,19 @@
             const antGoal = getNextGoal(userData.user1.steps);
             const amyGoal = getNextGoal(userData.user2.steps);
 
-            // Ant Bar
+            // Ant Bar with Peer Marker
             const antProgress = Math.min(100, (userData.user1.steps / antGoal.steps) * 100);
             const antPeerPos = Math.min(100, (userData.user2.steps / antGoal.steps) * 100);
             
             document.getElementById('ant-progress-row').innerHTML = `
                 <div class="flex justify-between items-end mb-1">
                     <span class="font-bold text-green-700">${USER_1_NAME}</span>
-                    <span class="text-xs text-gray-500 font-medium">${antGoal.label}</span>
+                    <span class="text-xs text-gray-500 font-medium">${antGoal.description || antGoal.label}</span>
                 </div>
                 <div class="progress-bar-track overflow-visible">
                     <div class="progress-bar-fill-ant" style="width: ${antProgress}%"></div>
-                    <div class="peer-marker" style="left: ${antPeerPos}%">
-                        <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-purple-600"></div>
-                    </div>
+                    <!-- Peer marker (triangle) pointing up from bottom. Ant's bar shows Amy (Purple) -->
+                    <div class="peer-marker bottom" style="left: ${antPeerPos}%; border-bottom-color: #9333ea;" title="${userData.user2.name}"></div>
                 </div>
                 <div class="text-[10px] flex justify-between mt-1 text-gray-500">
                     <span>${userData.user1.steps.toLocaleString()} steps</span>
@@ -398,20 +316,19 @@
                 </div>
             `;
 
-            // Amy Bar
+            // Amy Bar with Peer Marker
             const amyProgress = Math.min(100, (userData.user2.steps / amyGoal.steps) * 100);
             const amyPeerPos = Math.min(100, (userData.user1.steps / amyGoal.steps) * 100);
 
             document.getElementById('amy-progress-row').innerHTML = `
                 <div class="flex justify-between items-end mb-1">
                     <span class="font-bold text-purple-700">${USER_2_NAME}</span>
-                    <span class="text-xs text-gray-500 font-medium">${amyGoal.label}</span>
+                    <span class="text-xs text-gray-500 font-medium">${amyGoal.description || amyGoal.label}</span>
                 </div>
                 <div class="progress-bar-track overflow-visible">
                     <div class="progress-bar-fill-amy" style="width: ${amyProgress}%"></div>
-                    <div class="peer-marker" style="left: ${amyPeerPos}%">
-                        <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-green-600"></div>
-                    </div>
+                    <!-- Peer marker (triangle) pointing up from bottom. Amy's bar shows Ant (Green) -->
+                    <div class="peer-marker bottom" style="left: ${amyPeerPos}%; border-bottom-color: #22c55e;" title="${userData.user1.name}"></div>
                 </div>
                 <div class="text-[10px] flex justify-between mt-1 text-gray-500">
                     <span>${userData.user2.steps.toLocaleString()} steps</span>
@@ -422,243 +339,64 @@
 
         function renderPassport() {
             passportContainer.innerHTML = '';
-            // Only show milestones where at least one person has reached it
-            const unlocked = MASTER_MILESTONES.filter(m => 
-                userData.user1.steps >= m.steps || userData.user2.steps >= m.steps
-            ).sort((a,b) => b.steps - a.steps); // Newest first
-
-            if(unlocked.length === 0) {
-                passportContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full italic py-10">Waiting for your first stamp! 👣</p>';
-                return;
-            }
+            const unlocked = MASTER_MILESTONES.filter(m => userData.user1.steps >= m.steps || userData.user2.steps >= m.steps).sort((a,b)=>b.steps-a.steps);
+            
+            if(unlocked.length === 0) { passportContainer.innerHTML = '<p class="col-span-full text-center text-gray-400 italic">No stamps yet!</p>'; return; }
 
             unlocked.forEach(m => {
-                const antDone = userData.user1.steps >= m.steps;
-                const amyDone = userData.user2.steps >= m.steps;
-                
-                const stamp = document.createElement('div');
-                stamp.className = 'stamp rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm';
-                stamp.innerHTML = `
-                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter mb-1">Milestone</p>
-                    <p class="text-sm font-bold text-gray-800 leading-tight mb-2">${m.label}</p>
-                    <div class="flex gap-4">
-                        <div class="flex flex-col items-center">
-                            <span class="text-xs font-black ${antDone ? 'text-green-500' : 'text-gray-300'}">A</span>
-                            <span class="text-[8px] text-gray-400">Ant</span>
-                        </div>
-                        <div class="flex flex-col items-center">
-                            <span class="text-xs font-black ${amyDone ? 'text-purple-500' : 'text-gray-300'}">A</span>
-                            <span class="text-[8px] text-gray-400">Amy</span>
-                        </div>
+                const ant = userData.user1.steps >= m.steps;
+                const amy = userData.user2.steps >= m.steps;
+                const div = document.createElement('div');
+                div.className = 'stamp';
+                div.innerHTML = `
+                    <p class="text-[10px] font-bold leading-tight px-1 mb-1 text-gray-800">${m.label}</p>
+                    <div class="flex gap-2">
+                        <span class="text-xs font-black ${ant?'text-green-600':'text-gray-300'}">A</span>
+                        <span class="text-xs font-black ${amy?'text-purple-600':'text-gray-300'}">A</span>
                     </div>
                 `;
-                passportContainer.appendChild(stamp);
+                passportContainer.appendChild(div);
             });
         }
 
         function renderLogs() {
-            user1LogContainer.innerHTML = '';
-            user2LogContainer.innerHTML = '';
-            
-            const sortedLogs = [...logData].sort((a, b) => b.date.toMillis() - a.date.toMillis());
-
-            sortedLogs.forEach(log => {
-                const container = log.userId === 'user1' ? user1LogContainer : user2LogContainer;
-                const entryEl = document.createElement('div');
-                entryEl.className = 'log-entry p-3 border rounded-lg flex justify-between items-start';
-                
-                const date = log.date.toDate();
-                const formattedDate = date.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' });
-                const isoDate = date.toISOString().split('T')[0];
-                const colorClass = log.userId === 'user1' ? 'text-green-600' : 'text-purple-600';
-                
-                entryEl.innerHTML = `
-                    <div class="flex-grow">
-                         <div class="flex items-center">
-                            <span class="font-bold ${colorClass} mr-2">${log.steps.toLocaleString()}</span>
-                            <button type="button" class="edit-date-btn text-sm text-gray-500 cursor-pointer hover:underline" data-log-id="${log.id}" data-date="${isoDate}">
-                                ${formattedDate}
-                            </button>
-                        </div>
-                        <p class="text-sm text-gray-700 mt-1">${log.note || ''}</p>
-                        <p class="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                            ${log.locationName ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" /></svg> ${log.locationName}` : ''}
-                        </p>
-                    </div>
-                    <div class="log-actions flex items-center gap-2 ml-2">
-                        <button data-log-id="${log.id}" class="edit-location-btn text-gray-500 hover:text-gray-700 p-1">
-                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" /></svg>
-                        </button>
-                        <button data-log-id="${log.id}" data-note="${log.note || ''}" class="edit-note-btn text-blue-500 hover:text-blue-700 p-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
-                        </button>
-                        <button data-log-id="${log.id}" data-steps="${log.steps}" data-user-id="${log.userId}" class="delete-log-btn text-red-500 hover:text-red-700 p-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
-                        </button>
-                    </div>
-                `;
-                container.appendChild(entryEl);
-            });
-        }
-        
-        function renderHighScores() {
-            user1HighScoreContainer.innerHTML = '';
-            user2HighScoreContainer.innerHTML = '';
-
-            ['user1', 'user2'].forEach(userKey => {
-                const userLogs = logData.filter(log => log.userId === userKey);
-                const container = userKey === 'user1' ? user1HighScoreContainer : user2HighScoreContainer;
-
-                if (userLogs.length === 0) {
-                    container.innerHTML = `<p class="text-center text-gray-500 italic">No entries yet.</p>`;
-                    return;
-                }
-
-                const highScoreLog = userLogs.reduce((max, log) => log.steps > max.steps ? log : max, userLogs[0]);
-
-                const entryEl = document.createElement('div');
-                entryEl.className = 'log-entry p-3 border-2 border-amber-400 bg-amber-50 rounded-lg flex justify-between items-start shadow';
-
-                const date = highScoreLog.date.toDate();
-                const formattedDate = date.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' });
-                const isoDate = date.toISOString().split('T')[0];
-                const colorClass = highScoreLog.userId === 'user1' ? 'text-green-600' : 'text-purple-600';
-
-                entryEl.innerHTML = `
-                    <div class="flex-grow">
-                         <div class="flex items-center">
-                            <span class="font-bold ${colorClass} text-lg mr-2">${highScoreLog.steps.toLocaleString()} 🏆</span>
-                            <button type="button" class="edit-date-btn text-sm text-gray-500 cursor-pointer hover:underline" data-log-id="${highScoreLog.id}" data-date="${isoDate}">
-                                ${formattedDate}
-                            </button>
-                        </div>
-                        <p class="text-sm text-gray-700 mt-1">${highScoreLog.note || ''}</p>
-                        <p class="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                            ${highScoreLog.locationName ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" /></svg> ${highScoreLog.locationName}` : ''}
-                        </p>
-                    </div>
-                    <div class="log-actions flex items-center gap-2 ml-2">
-                        <button data-log-id="${highScoreLog.id}" class="edit-location-btn text-gray-500 hover:text-gray-700 p-1">
-                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" /></svg>
-                        </button>
-                        <button data-log-id="${highScoreLog.id}" data-note="${highScoreLog.note || ''}" class="edit-note-btn text-blue-500 hover:text-blue-700 p-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
-                        </button>
-                        <button data-log-id="${highScoreLog.id}" data-steps="${highScoreLog.steps}" data-user-id="${highScoreLog.userId}" class="delete-log-btn text-red-500 hover:text-red-700 p-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
-                        </button>
-                    </div>
-                `;
-                container.appendChild(entryEl);
-            });
-        }
-
-        function renderStretchGoals() {
-            const container = document.getElementById("stretch-goals-container");
-            container.innerHTML = "";
-
-            const endDate = new Date('2026-10-01T00:00:00');
-            const today = new Date();
-            const daysRemaining = Math.max(1, Math.ceil((endDate - today) / (1000 * 60 * 60 * 24)));
-
-            const bothUsersExist = userData.user1 && userData.user2;
-
-            // Render Shared Goals
-            SHARED_STRETCH_GOALS.forEach(goal => {
-                const isAchieved = bothUsersExist && userData.user1.steps >= goal.steps && userData.user2.steps >= goal.steps;
-                
-                const antStepsNeeded = Math.max(0, goal.steps - (userData.user1?.steps || 0));
-                const amyStepsNeeded = Math.max(0, goal.steps - (userData.user2?.steps || 0));
-                const antDailyAvg = Math.ceil(antStepsNeeded / daysRemaining);
-                const amyDailyAvg = Math.ceil(amyStepsNeeded / daysRemaining);
-
-                const dailyAvgHtml = isAchieved ? '' : `
-                    <p class="text-xs text-gray-500 mt-1">
-                        Daily avg needed: 
-                        <span class="font-bold text-green-600">Ant: ${antDailyAvg.toLocaleString()}</span> | 
-                        <span class="font-bold text-purple-600">Amy: ${amyDailyAvg.toLocaleString()}</span>
-                    </p>`;
-
-                const goalEl = document.createElement("div");
-                goalEl.className = `stretch-goal-card bg-white p-4 rounded-lg shadow flex justify-between items-center border-l-gray-300 ${isAchieved ? "achieved bg-amber-50" : ""}`;
-                goalEl.innerHTML = `
-                    <div>
-                        <p class="font-semibold text-lg ${isAchieved ? "text-amber-700" : "text-gray-800"}">${goal.label} (Shared)</p>
-                        <p class="text-sm text-gray-500">${goal.steps.toLocaleString()} steps each</p>
-                        ${dailyAvgHtml}
-                    </div>
-                    <div class="text-3xl">${goal.reward}</div>`;
-                container.appendChild(goalEl);
-            });
-
-            // Render Individual Goals
-            ['user1', 'user2'].forEach(userKey => {
-                const user = userData[userKey];
-                (INDIVIDUAL_STRETCH_GOALS[userKey] || []).forEach(goal => {
-                    if (!user) return;
-                    const isAchieved = user.steps >= goal.steps;
-                    
-                    const stepsNeeded = Math.max(0, goal.steps - user.steps);
-                    const dailyAvg = Math.ceil(stepsNeeded / daysRemaining);
-                    
-                    const colorClass = userKey === 'user1' ? 'text-green-600' : 'text-purple-600';
-                    const dailyAvgHtml = isAchieved ? '' : `
-                        <p class="text-xs text-gray-500 mt-1">
-                            Daily avg needed: <span class="font-bold ${colorClass}">${dailyAvg.toLocaleString()}</span>
-                        </p>`;
-
-                    const goalEl = document.createElement("div");
-                    goalEl.className = `stretch-goal-card bg-white p-4 rounded-lg shadow flex justify-between items-center border-l-gray-300 ${isAchieved ? "achieved bg-amber-50" : ""}`;
-                    goalEl.innerHTML = `
+            const logs = [...logData].sort((a,b) => b.date.toMillis() - a.date.toMillis());
+            ['user1', 'user2'].forEach(uid => {
+                const el = document.getElementById(`${uid}-log`);
+                el.innerHTML = '';
+                const uLogs = logs.filter(l => l.userId === uid);
+                uLogs.forEach(l => {
+                    const div = document.createElement('div');
+                    div.className = 'log-entry p-2 border rounded text-xs bg-white flex justify-between';
+                    const date = l.date.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short'});
+                    div.innerHTML = `
                         <div>
-                            <p class="font-semibold text-lg ${isAchieved ? "text-amber-700" : "text-gray-800"}">${goal.label} (${user.name})</p>
-                            <p class="text-sm text-gray-500">${goal.steps.toLocaleString()} steps</p>
-                            ${dailyAvgHtml}
+                            <span class="font-bold ${uid==='user1'?'text-green-600':'text-purple-600'}">${l.steps.toLocaleString()}</span>
+                            <span class="text-gray-400 ml-1 cursor-pointer hover:underline edit-date" data-id="${l.id}" data-date="${l.date.toDate().toISOString().split('T')[0]}">${date}</span>
+                            ${l.note ? `<div class="text-gray-600 italic truncate w-24 sm:w-32">"${l.note}"</div>` : ''}
+                            ${l.locationName ? `<div class="text-gray-500 truncate w-24 sm:w-32">📍 ${l.locationName}</div>` : ''}
                         </div>
-                        <div class="text-3xl">${goal.reward}</div>`;
-                    container.appendChild(goalEl);
+                        <div class="flex gap-1 items-center">
+                            <button class="text-gray-400 hover:text-gray-600 edit-loc" data-id="${l.id}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            </button>
+                            <button class="text-blue-400 hover:text-blue-600 edit-note" data-id="${l.id}" data-note="${l.note||''}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            </button>
+                            <button class="text-red-400 hover:text-red-600 del-log" data-id="${l.id}" data-steps="${l.steps}" data-uid="${uid}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                    `;
+                    el.appendChild(div);
                 });
             });
-        }
-
-        // UPDATED: Logic for dynamic stats filter and calculation
-        function setupStatsFilter() {
-            const start = new Date(2025, 9, 1); // Oct 1, 2025
-            const now = new Date();
-            const filter = document.getElementById('stats-filter');
-            
-            let html = '<option value="all">All Time</option>';
-            
-            let current = new Date(start);
-            let currentYear = -1;
-            
-            // Loop from start date until we pass the current date
-            while (current <= now || (current.getMonth() === now.getMonth() && current.getFullYear() === now.getFullYear())) {
-                const y = current.getFullYear();
-                const m = current.getMonth();
-                const mName = current.toLocaleString('default', { month: 'short' });
-                
-                if (y !== currentYear) {
-                    if (currentYear !== -1) html += '</optgroup>';
-                    html += `<optgroup label="${y}">`;
-                    currentYear = y;
-                }
-                
-                html += `<option value="${y}-${m}">${mName} ${y}</option>`;
-                
-                // Move to next month
-                current.setMonth(current.getMonth() + 1);
-            }
-            if (currentYear !== -1) html += '</optgroup>';
-            
-            filter.innerHTML = html;
-            filter.addEventListener('change', updateUI);
         }
 
         function calculateAndRenderStats() {
             const filterValue = statsFilter.value;
             const today = new Date();
-            const challengeStart = new Date(2025, 9, 1); // Oct 1, 2025
+            const challengeStart = new Date(2025, 9, 1); 
 
             ['user1', 'user2'].forEach(userKey => {
                 const userLogs = logData.filter(log => log.userId === userKey);
@@ -714,22 +452,21 @@
             logData.forEach(log => {
                 if(log.lat && log.lng) {
                     const isAnt = log.userId === 'user1';
-                    const color = isAnt ? '#22c55e' : '#9333ea';
+                    // Updated to use standard Leaflet marker colors (simulated with CSS filter in style block)
+                    const iconClass = isAnt ? 'marker-icon-ant' : 'marker-icon-amy';
                     
-                    const svgIcon = `
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" fill="${color}">
-                            <path d="M12 0C7.589 0 4 3.589 4 8c0 4.411 8 16 8 16s8-11.589 8-16c0-4.411-3.589-8-8-8zm0 12c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
-                        </svg>`;
-
-                    const customIcon = L.divIcon({
-                        html: svgIcon,
-                        className: '',
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 32],
-                        popupAnchor: [0, -32]
+                    const icon = L.icon({
+                        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41],
+                        className: iconClass // Apply CSS filter for color
                     });
 
-                    const marker = L.marker([log.lat, log.lng], { icon: customIcon });
+                    const marker = L.marker([log.lat, log.lng], { icon: icon });
                     
                     const popupContent = `
                         <div class="text-base">
@@ -745,20 +482,132 @@
             });
         }
 
-        function updateUI() {
-            if (!userData.user1 || !userData.user2) return;
-            renderBars();
-            renderPassport();
-            renderLogs();
-            calculateAndRenderStats();
-            renderStretchGoals();
-            renderHighScores();
-            renderMap();
-            setTimeout(() => document.querySelectorAll('.milestone').forEach(m => m.classList.add('visible')), 100);
+        function renderStretch() {
+            const div = document.getElementById('stretch-goals-container');
+            div.innerHTML = '';
+            const end = new Date('2026-10-01');
+            const daysLeft = Math.max(1, Math.ceil((end - new Date())/86400000));
+            
+            SHARED_STRETCH.forEach(g => {
+                const done = userData.user1.steps >= g.steps && userData.user2.steps >= g.steps;
+                const rem1 = Math.max(0, g.steps - userData.user1.steps), rem2 = Math.max(0, g.steps - userData.user2.steps);
+                div.innerHTML += `<div class="bg-white p-3 rounded border-l-4 ${done?'border-amber-400 bg-amber-50':'border-gray-200'} shadow-sm flex justify-between">
+                    <div><div class="font-bold text-sm">${g.label}</div><div class="text-xs text-gray-500">${g.steps.toLocaleString()} each</div>
+                    ${!done ? `<div class="text-[10px] mt-1">Daily: <span class="text-green-600">${Math.ceil(rem1/daysLeft)}</span> | <span class="text-purple-600">${Math.ceil(rem2/daysLeft)}</span></div>` : ''}
+                    </div><div class="text-xl">${g.reward}</div></div>`;
+            });
+            ['user1','user2'].forEach(uid => {
+                (INDIVIDUAL_STRETCH[uid]||[]).forEach(g => {
+                    const done = userData[uid].steps >= g.steps;
+                    const rem = Math.max(0, g.steps - userData[uid].steps);
+                    div.innerHTML += `<div class="bg-white p-3 rounded border-l-4 ${done?'border-amber-400 bg-amber-50':'border-gray-200'} shadow-sm flex justify-between">
+                        <div><div class="font-bold text-sm">${g.label} (${userData[uid].name})</div><div class="text-xs text-gray-500">${g.steps.toLocaleString()}</div>
+                        ${!done ? `<div class="text-[10px] mt-1 text-${uid==='user1'?'green':'purple'}-600">Daily: ${Math.ceil(rem/daysLeft)}</div>` : ''}
+                        </div><div class="text-xl">${g.reward}</div></div>`;
+                });
+            });
         }
 
-        // --- Event Handlers ---
-        
+        function renderHighScores() {
+            ['user1','user2'].forEach(uid => {
+                const uLogs = logData.filter(l => l.userId === uid);
+                const best = uLogs.reduce((m, l) => l.steps > m.steps ? l : m, {steps:0});
+                
+                const dateStr = best.date ? best.date.toDate().toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'}) : '-';
+                const color = uid==='user1'?'green':'purple';
+                
+                // Show both location and note if available
+                let details = '';
+                if (best.locationName) details += `<div class="text-xs text-gray-400 mt-1 flex justify-center items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" /></svg> ${best.locationName}</div>`;
+                if (best.note) details += `<div class="text-sm text-gray-800 font-medium italic px-2 mt-1">"${best.note}"</div>`;
+                
+                if (!details) details = `<div class="text-sm text-gray-800 font-medium italic px-2 mt-1">"Amazing effort! 🚀"</div>`;
+                
+                document.getElementById(`${uid}-highscore`).innerHTML = best.steps > 0 ? 
+                    `<div class="bg-amber-50 border-2 border-amber-300 p-3 rounded-lg text-center shadow-sm relative overflow-hidden">
+                        <div class="text-2xl font-black text-${color}-600 mb-1">${best.steps.toLocaleString()}</div>
+                        <div class="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">${dateStr}</div>
+                        ${details}
+                    </div>` : 
+                    '<div class="text-center text-xs text-gray-400 italic py-4">No Data Yet</div>';
+            });
+        }
+
+        // --- Interaction ---
+        const modal = document.getElementById('modal-overlay');
+        const showModal = (title, content, onConfirm) => {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-content').innerHTML = content;
+            modal.classList.remove('hidden');
+            const confirmBtn = document.getElementById('modal-confirm');
+            const newConfirm = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+            newConfirm.addEventListener('click', () => { onConfirm(); modal.classList.add('hidden'); });
+            document.getElementById('modal-cancel').onclick = () => modal.classList.add('hidden');
+        };
+
+        document.addEventListener('click', async e => {
+            const btn = e.target.closest('button');
+            const span = e.target.closest('span.edit-date');
+            if(span) {
+                showModal('Change Date', `<input type="date" id="m-date" value="${span.dataset.date}" class="w-full border p-2 rounded">`, async () => {
+                    const d = document.getElementById('m-date').value;
+                    if(d) await updateDoc(doc(logsCollectionRef, span.dataset.id), { date: Timestamp.fromDate(new Date(d)) });
+                });
+            }
+            if(!btn) return;
+            
+            if(btn.classList.contains('edit-note')) {
+                showModal('Edit Note', `<textarea id="m-note" class="w-full border p-2 rounded" maxlength="150">${btn.dataset.note}</textarea>`, async () => {
+                    await updateDoc(doc(logsCollectionRef, btn.dataset.id), { note: document.getElementById('m-note').value });
+                });
+            }
+            if(btn.classList.contains('edit-loc')) {
+                showModal('Add Location', `<input id="m-loc" class="w-full border p-2 rounded" placeholder="e.g. Eiffel Tower">`, async () => {
+                    const q = document.getElementById('m-loc').value;
+                    if(!q) return;
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`);
+                    const data = await res.json();
+                    if(data.length) await updateDoc(doc(logsCollectionRef, btn.dataset.id), { locationName: data[0].display_name.split(',')[0], lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+                });
+            }
+            if(btn.classList.contains('del-log')) {
+                showModal('Delete Entry?', '<p class="text-red-600">This cannot be undone.</p>', async () => {
+                    const { id, steps, uid } = btn.dataset;
+                    await runTransaction(db, async t => {
+                        const ref = uid==='user1'?user1DocRef:user2DocRef;
+                        const u = await t.get(ref);
+                        t.update(ref, { steps: Math.max(0, u.data().steps - parseInt(steps)) });
+                        t.delete(doc(logsCollectionRef, id));
+                    });
+                });
+            }
+        });
+
+        function setupStatsFilter() {
+            const start = new Date(2025, 9, 1);
+            const now = new Date();
+            const filter = document.getElementById('stats-filter');
+            let html = '<option value="all">All Time</option>';
+            let current = new Date(start);
+            let currentYear = -1;
+            while (current <= now || (current.getMonth() === now.getMonth() && current.getFullYear() === now.getFullYear())) {
+                const y = current.getFullYear();
+                const m = current.getMonth();
+                const mName = current.toLocaleString('default', { month: 'short' });
+                if (y !== currentYear) {
+                    if (currentYear !== -1) html += '</optgroup>';
+                    html += `<optgroup label="${y}">`;
+                    currentYear = y;
+                }
+                html += `<option value="${y}-${m}">${mName} ${y}</option>`;
+                current.setMonth(current.getMonth() + 1);
+            }
+            if (currentYear !== -1) html += '</optgroup>';
+            filter.innerHTML = html;
+            filter.addEventListener('change', updateUI);
+        }
+
         function setupUserSelector() {
             ['user1', 'user2'].forEach(userKey => {
                 const button = document.createElement('button');
@@ -800,7 +649,7 @@
                 stepInput.focus();
             });
         }
-        
+
         async function handleStepSubmit(e) {
             e.preventDefault();
             if (!currentUser) return;
@@ -808,203 +657,35 @@
             if (isNaN(steps) || steps <= 0) return;
             
             stepInput.disabled = true;
-            feedbackMessage.textContent = 'Saving...';
-            
-            const userDocRef = currentUser === 'user1' ? user1DocRef : user2DocRef;
-            const oldTotal = userData[currentUser].steps;
-
             try {
-                await runTransaction(db, async (transaction) => {
-                    const userDoc = await transaction.get(userDocRef);
-                    if (!userDoc.exists()) { throw "Document does not exist!"; }
-                    const newTotal = userDoc.data().steps + steps;
-                    transaction.update(userDocRef, { steps: newTotal });
-                    transaction.set(doc(logsCollectionRef), {
-                        userId: currentUser,
-                        steps: steps,
-                        note: "",
-                        date: Timestamp.now(),
-                        locationName: null,
-                        lat: null,
-                        lng: null
+                await runTransaction(db, async (t) => {
+                    const uDoc = await t.get(currentUser === 'user1' ? user1DocRef : user2DocRef);
+                    const newTotal = uDoc.data().steps + steps;
+                    t.update(uDoc.ref, { steps: newTotal });
+                    t.set(doc(logsCollectionRef), {
+                        userId: currentUser, steps: steps, note: "", date: Timestamp.now()
                     });
                 });
-
                 stepForm.reset();
-                feedbackMessage.textContent = `Added ${steps.toLocaleString()} steps!`;
-                
-                const allUserGoals = getAllGoalsForUser(currentUser);
-                if (allUserGoals.find(g => oldTotal < g.steps && (oldTotal + steps) >= g.steps)) {
-                    confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
-                }
-            } catch (error) {
-                console.error("Error adding steps:", error);
-                feedbackMessage.textContent = 'Error saving. Please try again.';
-            } finally {
-                stepInput.disabled = false;
-                setTimeout(() => feedbackMessage.textContent = '', 3000);
-            }
-        }
-        
-        // --- Modal Handlers ---
-        let confirmCallback = null;
-        function showConfirmModal(message, onConfirm) {
-            confirmModalText.textContent = message;
-            confirmCallback = onConfirm;
-            confirmModal.classList.remove('hidden');
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 } });
+            } catch (err) { console.error(err); }
+            finally { stepInput.disabled = false; }
         }
 
-        confirmCancelBtn.addEventListener('click', () => {
-            confirmModal.classList.add('hidden');
-            confirmCallback = null;
-        });
-
-        confirmDeleteBtn.addEventListener('click', () => {
-            if (confirmCallback) {
-                confirmCallback();
-            }
-            confirmModal.classList.add('hidden');
-            confirmCallback = null;
-        });
-        
-        let currentLogIdForNote = null;
-        function handleOpenNoteModal(e) {
-            const button = e.target.closest('.edit-note-btn');
-            if (button) {
-                currentLogIdForNote = button.dataset.logId;
-                noteInput.value = button.dataset.note;
-                noteModal.classList.remove('hidden');
-                noteInput.focus();
-            }
-        }
-        noteCancelBtn.addEventListener('click', () => noteModal.classList.add('hidden'));
-        noteForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!currentLogIdForNote) return;
-            const logDocRef = doc(logsCollectionRef, currentLogIdForNote);
-            await updateDoc(logDocRef, { note: noteInput.value });
-            noteModal.classList.add('hidden');
-            currentLogIdForNote = null;
-        });
-
-        let currentLogIdForDate = null;
-        function handleOpenDateModal(e) {
-            const button = e.target.closest('.edit-date-btn');
-            if (button) {
-                currentLogIdForDate = button.dataset.logId;
-                dateInput.value = button.dataset.date;
-                dateModal.classList.remove('hidden');
-            }
+        // Move updateUI definition before main calls it
+        function updateUI() {
+            if (!userData.user1 || !userData.user2) return;
+            renderBars();
+            renderPassport();
+            renderLogs();
+            calculateAndRenderStats();
+            renderStretch();
+            renderHighScores();
+            renderMap();
+            setTimeout(() => document.querySelectorAll('.milestone').forEach(m => m.classList.add('visible')), 100);
         }
 
-        dateCancelBtn.addEventListener('click', () => {
-            dateModal.classList.add('hidden');
-            currentLogIdForDate = null;
-        });
-
-        dateForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!currentLogIdForDate || !dateInput.value) return;
-            
-            const logDocRef = doc(logsCollectionRef, currentLogIdForDate);
-            const newDate = new Date(dateInput.value + "T12:00:00");
-            
-            try {
-                await updateDoc(logDocRef, { date: Timestamp.fromDate(newDate) });
-            } catch (error) {
-                console.error("Error updating date:", error);
-                feedbackMessage.textContent = 'Failed to update date.';
-                setTimeout(() => { feedbackMessage.textContent = '' }, 3000);
-            } finally {
-                dateModal.classList.add('hidden');
-                currentLogIdForDate = null;
-            }
-        });
-
-        let currentLogIdForLocation = null;
-        function handleOpenLocationModal(e) {
-            const button = e.target.closest('.edit-location-btn');
-            if (button) {
-                currentLogIdForLocation = button.dataset.logId;
-                locationInput.value = '';
-                locationModal.classList.remove('hidden');
-                locationInput.focus();
-            }
-        }
-        locationCancelBtn.addEventListener('click', () => locationModal.classList.add('hidden'));
-        locationForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!currentLogIdForLocation) return;
-            const locationText = locationInput.value.trim();
-            if (!locationText) return;
-
-            const button = locationForm.querySelector('button[type="submit"]');
-            button.disabled = true;
-            button.textContent = 'Searching...';
-
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationText)}&format=json&limit=1`);
-                if (!response.ok) throw new Error('Network response was not ok');
-                const data = await response.json();
-
-                if (data.length > 0) {
-                    const { lat, lon, display_name } = data[0];
-                    const logDocRef = doc(logsCollectionRef, currentLogIdForLocation);
-                    await updateDoc(logDocRef, {
-                        locationName: display_name,
-                        lat: parseFloat(lat),
-                        lng: parseFloat(lon)
-                    });
-                    locationModal.classList.add('hidden');
-                } else {
-                    alert('Location not found. Please try being more specific.');
-                }
-            } catch (error) {
-                console.error("Error geocoding:", error);
-                alert('Could not find location. Please check your connection and try again.');
-            } finally {
-                button.disabled = false;
-                button.textContent = 'Search & Save';
-            }
-        });
-
-        // --- Log Action Handlers (Delegated) ---
-        async function handleDeleteLog(e) {
-            const button = e.target.closest('.delete-log-btn');
-            if (button) {
-                const { logId, steps, userId } = button.dataset;
-                const stepsToDeduct = parseInt(steps, 10);
-
-                const onConfirm = async () => {
-                    const logDocRef = doc(logsCollectionRef, logId);
-                    const userDocRef = userId === 'user1' ? user1DocRef : user2DocRef;
-                    try {
-                        await runTransaction(db, async (transaction) => {
-                             const userDoc = await transaction.get(userDocRef);
-                             if (!userDoc.exists()) { throw "User document not found"; }
-                             const newTotal = Math.max(0, userDoc.data().steps - stepsToDeduct);
-                             transaction.update(userDocRef, { steps: newTotal });
-                             transaction.delete(logDocRef);
-                        });
-                    } catch (error) {
-                        console.error("Error deleting log entry:", error);
-                        feedbackMessage.textContent = 'Failed to delete entry.';
-                        setTimeout(() => { feedbackMessage.textContent = '' }, 3000);
-                    }
-                };
-                
-                showConfirmModal(`Are you sure you want to delete this log of ${stepsToDeduct.toLocaleString()} steps? This cannot be undone.`, onConfirm);
-            }
-        }
-        
-        document.addEventListener('click', (e) => {
-            handleOpenNoteModal(e);
-            handleDeleteLog(e);
-            handleOpenDateModal(e);
-            handleOpenLocationModal(e);
-        });
-
-        // Initialisation
+        // --- Setup ---
         function initializeMap() {
             map = L.map('map').setView([54.5, -2.5], 6); 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
