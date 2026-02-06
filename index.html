@@ -669,12 +669,24 @@
             if (!map || !markers) return;
             markers.clearLayers();
 
+            // Collect all pin positions to detect overlaps
+            const pinPositions = [];
+
             logData.forEach(log => {
                 if(log.lat && log.lng) {
                     const isAnt = log.userId === 'user1';
-                    // Updated to use standard Leaflet marker colors (simulated with CSS filter in style block)
                     const iconClass = isAnt ? 'marker-icon-ant' : 'marker-icon-amy';
                     
+                    // Check if another pin is very close (same location)
+                    let lat = log.lat;
+                    let lng = log.lng;
+                    const overlap = pinPositions.find(p => Math.abs(p.lat - lat) < 0.001 && Math.abs(p.lng - lng) < 0.001);
+                    if (overlap) {
+                        // Nudge Ant left, Amy right
+                        lng += isAnt ? -0.003 : 0.003;
+                    }
+                    pinPositions.push({ lat: log.lat, lng: log.lng });
+
                     const icon = L.icon({
                         iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
                         iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -686,7 +698,7 @@
                         className: iconClass // Apply CSS filter for color
                     });
 
-                    const marker = L.marker([log.lat, log.lng], { icon: icon });
+                    const marker = L.marker([lat, lng], { icon: icon });
                     
                     // Simplify location text to first comma
                     const shortLocation = log.locationName ? log.locationName.split(',')[0] : '';
