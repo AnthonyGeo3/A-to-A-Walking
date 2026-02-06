@@ -711,17 +711,12 @@
                 }
             });
 
-            // Auto-fit map to show all pins (on first load and when new pins are added)
-            const currentPinCount = markers.getLayers().length;
-            if (currentPinCount > 0) {
-                map.invalidateSize();
-                if (!map._lastPinCount || map._lastPinCount !== currentPinCount) {
-                    map._lastPinCount = currentPinCount;
-                    setTimeout(() => {
-                        map.invalidateSize();
-                        map.fitBounds(markers.getBounds(), { padding: [30, 30], maxZoom: 12 });
-                    }, 300);
-                }
+            // Auto-fit map to show all pins
+            if (markers.getLayers().length > 0) {
+                setTimeout(() => {
+                    map.invalidateSize();
+                    map.fitBounds(markers.getBounds(), { padding: [40, 40], maxZoom: 12 });
+                }, 400);
             }
         }
 
@@ -961,6 +956,11 @@
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
             markers = L.layerGroup().addTo(map);
+
+            // Fix Leaflet container sizing issues — recheck once layout is stable
+            setTimeout(() => map.invalidateSize(), 500);
+            setTimeout(() => map.invalidateSize(), 1500);
+            window.addEventListener('resize', () => map.invalidateSize());
         }
 
         async function main() {
