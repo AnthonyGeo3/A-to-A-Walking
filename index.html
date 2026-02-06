@@ -360,7 +360,7 @@
                     <div class="peer-marker bottom" style="left: ${antPeerPos}%; border-bottom-color: #9333ea;" title="${userData.user2.name}"></div>
                 </div>
                 <div class="text-[10px] flex justify-between mt-1 text-gray-500">
-                    <span>${userData.user1.steps.toLocaleString()} steps · ${(userData.user1.steps / 1300).toFixed(1)} km</span>
+                    <span>${userData.user1.steps.toLocaleString()} steps · ${(userData.user1.steps / 2100).toFixed(1)} mi · ${(userData.user1.steps / 1300).toFixed(1)} km</span>
                     <span>${(antGoal.steps - userData.user1.steps).toLocaleString()} to go</span>
                 </div>
             `;
@@ -380,7 +380,7 @@
                     <div class="peer-marker bottom" style="left: ${amyPeerPos}%; border-bottom-color: #22c55e;" title="${userData.user1.name}"></div>
                 </div>
                 <div class="text-[10px] flex justify-between mt-1 text-gray-500">
-                    <span>${userData.user2.steps.toLocaleString()} steps · ${(userData.user2.steps / 1300).toFixed(1)} km</span>
+                    <span>${userData.user2.steps.toLocaleString()} steps · ${(userData.user2.steps / 2100).toFixed(1)} mi · ${(userData.user2.steps / 1300).toFixed(1)} km</span>
                     <span>${(amyGoal.steps - userData.user2.steps).toLocaleString()} to go</span>
                 </div>
             `;
