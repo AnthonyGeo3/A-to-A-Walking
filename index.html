@@ -148,15 +148,20 @@
             </div>
             <div class="grid grid-cols-2 gap-4 text-center">
                 <div class="bg-green-50 p-2 rounded border border-green-100">
-                    <p class="text-[10px] uppercase font-bold text-green-700">Ant Avg / Pred</p>
-                    <p class="text-green-600 font-bold"><span id="user1-avg-steps">0</span> / <span id="user1-predicted-steps">0</span></p>
+                    <p class="text-[10px] uppercase font-bold text-green-700">Ant Daily Avg</p>
+                    <p class="text-green-600 font-bold"><span id="user1-avg-steps">0</span></p>
+                    <p class="text-[10px] uppercase font-bold text-green-700 mt-1"><span id="user1-pred-label">Year Prediction</span></p>
+                    <p class="text-green-600 font-bold"><span id="user1-predicted-steps">0</span></p>
                 </div>
                 <div class="bg-purple-50 p-2 rounded border border-purple-100">
-                    <p class="text-[10px] uppercase font-bold text-purple-700">Amy Avg / Pred</p>
-                    <p class="text-purple-600 font-bold"><span id="user2-avg-steps">0</span> / <span id="user2-predicted-steps">0</span></p>
+                    <p class="text-[10px] uppercase font-bold text-purple-700">Amy Daily Avg</p>
+                    <p class="text-purple-600 font-bold"><span id="user2-avg-steps">0</span></p>
+                    <p class="text-[10px] uppercase font-bold text-purple-700 mt-1"><span id="user2-pred-label">Year Prediction</span></p>
+                    <p class="text-purple-600 font-bold"><span id="user2-predicted-steps">0</span></p>
                 </div>
             </div>
             <div id="heatmap-container" class="mt-4"></div>
+            <p id="heatmap-tap-info" class="text-center text-xs text-gray-400 mt-1 h-4"></p>
         </div>
 
         <!-- Passport -->
@@ -185,8 +190,14 @@
         <div class="border-t pt-6 mb-8">
             <h2 class="text-xl font-bold text-center mb-4">Best Days 🏆</h2>
             <div class="grid grid-cols-2 gap-4" id="highscore-container">
-                <div id="user1-highscore"></div>
-                <div id="user2-highscore"></div>
+                <div>
+                    <p class="text-xs font-bold text-green-600 text-center mb-2">Ant</p>
+                    <div id="user1-highscore"></div>
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-purple-600 text-center mb-2">Amy</p>
+                    <div id="user2-highscore"></div>
+                </div>
             </div>
         </div>
 
@@ -194,10 +205,16 @@
         <div class="border-t pt-6">
             <h2 class="text-xl font-bold text-center mb-4">Log & Map</h2>
             <div class="grid grid-cols-2 gap-4 mb-6">
-                <div id="user1-log" class="max-h-64 overflow-y-auto space-y-2"></div>
-                <div id="user2-log" class="max-h-64 overflow-y-auto space-y-2"></div>
+                <div>
+                    <p class="text-xs font-bold text-green-600 text-center mb-2">Ant</p>
+                    <div id="user1-log" class="max-h-64 overflow-y-auto space-y-2"></div>
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-purple-600 text-center mb-2">Amy</p>
+                    <div id="user2-log" class="max-h-64 overflow-y-auto space-y-2"></div>
+                </div>
             </div>
-            <div id="map" class="h-64 rounded-lg shadow-md"></div>
+            <div id="map" class="h-80 rounded-lg shadow-md"></div>
         </div>
     </div>
 
@@ -342,12 +359,6 @@
             } catch (e) { console.error(e); }
         }
         
-        function getAllGoalsForUser(userKey) {
-            const userMilestones = MASTER_MILESTONES;
-            const userStretchGoals = INDIVIDUAL_STRETCH_GOALS[userKey] || [];
-            return [...userMilestones, ...SHARED_STRETCH, ...userStretchGoals].sort((a, b) => a.steps - b.steps);
-        }
-
         // --- Render Helpers ---
 
         function getNextGoal(steps) {
@@ -587,6 +598,9 @@
                 
                 if (avgTarget) avgTarget.textContent = Math.round(averageSteps).toLocaleString();
                 if (predTarget) predTarget.textContent = Math.round(predictedSteps).toLocaleString();
+
+                const predLabel = document.getElementById(`${userKey}-pred-label`);
+                if (predLabel) predLabel.textContent = filterValue === 'all' ? 'Year Prediction' : 'Month Prediction';
             });
         }
 
@@ -655,7 +669,7 @@
                     const textColor = intensity > 0.5 ? 'color: white;' : 'color: #9ca3af;';
                     const title = steps > 0 ? `${steps.toLocaleString()} steps` : 'No steps';
 
-                    html += `<div class="heatmap-cell" style="background: ${bg}; ${border} ${textColor}" title="${d} ${monthName}: ${title}">${d}</div>`;
+                    html += `<div class="heatmap-cell" style="background: ${bg}; ${border} ${textColor} cursor: pointer;" data-steps="${steps}" data-day="${d}" data-name="${name}">${d}</div>`;
                 }
 
                 html += '</div></div>';
@@ -663,6 +677,19 @@
 
             html += '</div>';
             container.innerHTML = html;
+
+            // Tap to show step count on mobile
+            const tapInfo = document.getElementById('heatmap-tap-info');
+            container.addEventListener('click', e => {
+                const cell = e.target.closest('.heatmap-cell');
+                if (!cell || !cell.dataset.day) return;
+                const steps = parseInt(cell.dataset.steps);
+                const day = cell.dataset.day;
+                const name = cell.dataset.name;
+                tapInfo.textContent = steps > 0 
+                    ? `${name} · ${day} ${monthName} · ${steps.toLocaleString()} steps`
+                    : `${name} · ${day} ${monthName} · No steps`;
+            });
         }
         
         function renderMap() {
@@ -683,7 +710,7 @@
                     const overlap = pinPositions.find(p => Math.abs(p.lat - lat) < 0.001 && Math.abs(p.lng - lng) < 0.001);
                     if (overlap) {
                         // Nudge Ant left, Amy right
-                        lng += isAnt ? -0.0015 : 0.0015;
+                        lng += isAnt ? -0.003 : 0.003;
                     }
                     pinPositions.push({ lat: log.lat, lng: log.lng });
 
@@ -751,27 +778,41 @@
         }
 
         function renderHighScores() {
+            const medals = ['🥇', '🥈', '🥉'];
             ['user1','user2'].forEach(uid => {
-                const uLogs = logData.filter(l => l.userId === uid);
-                const best = uLogs.reduce((m, l) => l.steps > m.steps ? l : m, {steps:0});
-                
-                const dateStr = best.date ? best.date.toDate().toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'}) : '-';
-                const color = uid==='user1'?'green':'purple';
-                
-                // Show both location and note if available
-                let details = '';
-                if (best.locationName) details += `<div class="text-xs text-gray-400 mt-1 flex justify-center items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" /></svg> ${best.locationName}</div>`;
-                if (best.note) details += `<div class="text-sm text-gray-800 font-medium italic px-2 mt-1">"${best.note}"</div>`;
-                
-                if (!details) details = `<div class="text-sm text-gray-800 font-medium italic px-2 mt-1">"Amazing effort! 🚀"</div>`;
-                
-                document.getElementById(`${uid}-highscore`).innerHTML = best.steps > 0 ? 
-                    `<div class="bg-amber-50 border-2 border-amber-300 p-3 rounded-lg text-center shadow-sm relative overflow-hidden">
-                        <div class="text-2xl font-black text-${color}-600 mb-1">${best.steps.toLocaleString()}</div>
-                        <div class="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">${dateStr}</div>
-                        ${details}
-                    </div>` : 
-                    '<div class="text-center text-xs text-gray-400 italic py-4">No Data Yet</div>';
+                const uLogs = logData.filter(l => l.userId === uid).sort((a, b) => b.steps - a.steps);
+                const top3 = uLogs.slice(0, 3);
+                const color = uid === 'user1' ? 'green' : 'purple';
+                const name = uid === 'user1' ? 'Ant' : 'Amy';
+                const el = document.getElementById(`${uid}-highscore`);
+
+                if (top3.length === 0) {
+                    el.innerHTML = '<div class="text-center text-xs text-gray-400 italic py-4">No Data Yet</div>';
+                    return;
+                }
+
+                let html = `<div class="space-y-2">`;
+                top3.forEach((entry, i) => {
+                    const dateStr = entry.date.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                    const isGold = i === 0;
+                    const bg = isGold ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-200';
+                    const border = isGold ? 'border-2' : 'border';
+
+                    let detail = '';
+                    if (entry.note) detail = `<span class="text-gray-500 italic"> "${entry.note}"</span>`;
+                    else if (entry.locationName) detail = `<span class="text-gray-400"> 📍 ${entry.locationName.split(',')[0]}</span>`;
+
+                    html += `<div class="${bg} ${border} p-2 rounded-lg flex items-center gap-2">
+                        <span class="text-lg">${medals[i]}</span>
+                        <div class="flex-1 min-w-0">
+                            <span class="font-black text-${color}-600">${entry.steps.toLocaleString()}</span>
+                            <span class="text-[10px] text-gray-400 ml-1">${dateStr}</span>
+                            ${detail ? `<div class="text-[10px] truncate">${detail}</div>` : ''}
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+                el.innerHTML = html;
             });
         }
 
