@@ -115,9 +115,16 @@
         <div class="bg-gray-50 p-4 rounded-xl shadow-inner mb-8">
             <h2 class="text-lg font-semibold text-center mb-3">Log Steps</h2>
             <div class="flex justify-center gap-4 mb-3" id="user-selector"></div>
-            <form id="step-form" class="hidden flex flex-col sm:flex-row items-center justify-center gap-2">
-                <input type="number" id="step-input" placeholder="0" class="w-24 text-center p-2 border rounded-lg" required min="1">
-                <button type="submit" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Add</button>
+            <form id="step-form" class="hidden flex flex-col items-center justify-center gap-3 w-full">
+                <div class="flex items-center gap-2">
+                    <button type="button" id="date-prev" class="p-2 text-gray-400 hover:text-gray-700 text-lg font-bold">◀</button>
+                    <span id="date-display" class="text-sm font-semibold text-gray-600 min-w-[100px] text-center"></span>
+                    <button type="button" id="date-next" class="p-2 text-gray-400 hover:text-gray-700 text-lg font-bold">▶</button>
+                </div>
+                <div class="flex items-center gap-2 w-full max-w-xs">
+                    <input type="number" id="step-input" inputmode="numeric" placeholder="0" class="flex-1 text-center p-2 border rounded-lg text-lg" required min="1">
+                    <button type="submit" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Add</button>
+                </div>
             </form>
             <p id="feedback-message" class="text-center text-green-600 text-sm mt-2 h-4"></p>
         </div>
@@ -259,6 +266,7 @@
         let logData = [];
         let map = null;
         let markers = null;
+        let selectedDate = new Date();
 
         const userSelector = document.getElementById('user-selector');
         const stepForm = document.getElementById('step-form');
@@ -274,6 +282,41 @@
         const user2AvgSteps = document.getElementById('user2-avg-steps');
         const user1PredictedSteps = document.getElementById('user1-predicted-steps');
         const user2PredictedSteps = document.getElementById('user2-predicted-steps');
+        const dateDisplay = document.getElementById('date-display');
+        const datePrevBtn = document.getElementById('date-prev');
+        const dateNextBtn = document.getElementById('date-next');
+
+        // --- Date Selector ---
+        function updateDateDisplay() {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const sel = new Date(selectedDate);
+            sel.setHours(0,0,0,0);
+            const diffDays = Math.round((today - sel) / 86400000);
+
+            if (diffDays === 0) dateDisplay.textContent = 'Today';
+            else if (diffDays === 1) dateDisplay.textContent = 'Yesterday';
+            else dateDisplay.textContent = sel.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+            // Disable forward if already today
+            dateNextBtn.classList.toggle('invisible', diffDays <= 0);
+        }
+
+        datePrevBtn.addEventListener('click', () => {
+            selectedDate.setDate(selectedDate.getDate() - 1);
+            updateDateDisplay();
+        });
+        dateNextBtn.addEventListener('click', () => {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const sel = new Date(selectedDate);
+            sel.setHours(0,0,0,0);
+            if (sel < today) {
+                selectedDate.setDate(selectedDate.getDate() + 1);
+                updateDateDisplay();
+            }
+        });
+        updateDateDisplay();
 
         // --- Logic ---
 
@@ -317,7 +360,7 @@
                     <div class="peer-marker bottom" style="left: ${antPeerPos}%; border-bottom-color: #9333ea;" title="${userData.user2.name}"></div>
                 </div>
                 <div class="text-[10px] flex justify-between mt-1 text-gray-500">
-                    <span>${userData.user1.steps.toLocaleString()} steps</span>
+                    <span>${userData.user1.steps.toLocaleString()} steps · ${(userData.user1.steps / 1300).toFixed(1)} km</span>
                     <span>${(antGoal.steps - userData.user1.steps).toLocaleString()} to go</span>
                 </div>
             `;
@@ -337,7 +380,7 @@
                     <div class="peer-marker bottom" style="left: ${amyPeerPos}%; border-bottom-color: #22c55e;" title="${userData.user1.name}"></div>
                 </div>
                 <div class="text-[10px] flex justify-between mt-1 text-gray-500">
-                    <span>${userData.user2.steps.toLocaleString()} steps</span>
+                    <span>${userData.user2.steps.toLocaleString()} steps · ${(userData.user2.steps / 1300).toFixed(1)} km</span>
                     <span>${(amyGoal.steps - userData.user2.steps).toLocaleString()} to go</span>
                 </div>
             `;
@@ -379,8 +422,8 @@
                         <div>
                             <span class="font-bold ${uid==='user1'?'text-green-600':'text-purple-600'}">${l.steps.toLocaleString()}</span>
                             <span class="text-gray-400 ml-1 cursor-pointer hover:underline edit-date" data-id="${l.id}" data-date="${l.date.toDate().toISOString().split('T')[0]}">${date}</span>
-                            ${l.note ? `<div class="text-gray-600 italic truncate w-24 sm:w-32">"${l.note}"</div>` : ''}
-                            ${l.locationName ? `<div class="text-gray-500 truncate w-24 sm:w-32">📍 ${l.locationName}</div>` : ''}
+                            ${l.note ? `<div class="text-gray-600 italic">"${l.note}"</div>` : ''}
+                            ${l.locationName ? `<div class="text-gray-500 truncate max-w-[140px] sm:max-w-[180px]">📍 ${l.locationName}</div>` : ''}
                         </div>
                         <div class="flex gap-1 items-center">
                             <button class="text-gray-400 hover:text-gray-600 edit-loc" data-id="${l.id}">
@@ -496,6 +539,11 @@
                     markers.addLayer(marker);
                 }
             });
+
+            // Auto-fit map to show all pins
+            if (markers.getLayers().length > 0) {
+                map.fitBounds(markers.getBounds(), { padding: [30, 30], maxZoom: 12 });
+            }
         }
 
         function renderStretch() {
@@ -551,15 +599,18 @@
 
         // --- Interaction ---
         const modal = document.getElementById('modal-overlay');
-        const showModal = (title, content, onConfirm) => {
+        const showModal = (title, content, onConfirm, confirmText) => {
             document.getElementById('modal-title').innerText = title;
             document.getElementById('modal-content').innerHTML = content;
             modal.classList.remove('hidden');
             const confirmBtn = document.getElementById('modal-confirm');
+            const cancelBtn = document.getElementById('modal-cancel');
             const newConfirm = confirmBtn.cloneNode(true);
             confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+            newConfirm.textContent = confirmText || 'Save';
+            cancelBtn.classList.toggle('hidden', !!confirmText);
             newConfirm.addEventListener('click', () => { onConfirm(); modal.classList.add('hidden'); });
-            document.getElementById('modal-cancel').onclick = () => modal.classList.add('hidden');
+            cancelBtn.onclick = () => modal.classList.add('hidden');
         };
 
         document.addEventListener('click', async e => {
@@ -672,6 +723,8 @@
             const steps = parseInt(stepInput.value, 10);
             if (isNaN(steps) || steps <= 0) return;
             
+            const oldSteps = userData[currentUser].steps;
+            
             stepInput.disabled = true;
             try {
                 await runTransaction(db, async (t) => {
@@ -679,11 +732,31 @@
                     const newTotal = uDoc.data().steps + steps;
                     t.update(uDoc.ref, { steps: newTotal });
                     t.set(doc(logsCollectionRef), {
-                        userId: currentUser, steps: steps, note: "", date: Timestamp.now()
+                        userId: currentUser, steps: steps, note: "", date: Timestamp.fromDate(selectedDate)
                     });
                 });
                 stepForm.reset();
-                confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 } });
+                
+                // Check if any milestones were crossed
+                const newSteps = oldSteps + steps;
+                const crossed = MASTER_MILESTONES.filter(m => oldSteps < m.steps && newSteps >= m.steps);
+                if (crossed.length > 0) {
+                    const best = crossed[crossed.length - 1];
+                    confetti({ particleCount: 200, spread: 120, origin: { y: 0.6 }, colors: currentUser === 'user1' ? ['#4ade80','#22c55e','#16a34a'] : ['#a855f7','#9333ea','#7e22ce'] });
+                    setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { y: 0.7, x: 0.3 } }), 300);
+                    setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { y: 0.7, x: 0.7 } }), 600);
+                    showModal('🎉 Milestone Reached!', `
+                        <div class="text-center py-2">
+                            <div class="text-4xl mb-3">${best.label.split(' ').pop()}</div>
+                            <div class="text-lg font-bold mb-1">${best.label}</div>
+                            <p class="text-gray-600 mb-2">${best.description}</p>
+                            <p class="text-sm text-gray-400">${newSteps.toLocaleString()} total steps</p>
+                        </div>`, () => {}, 'Nice! 🎉');
+                }
+
+                // Reset date to today after logging
+                selectedDate = new Date();
+                updateDateDisplay();
             } catch (err) { console.error(err); }
             finally { stepInput.disabled = false; }
         }
