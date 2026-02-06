@@ -468,16 +468,25 @@
 
                     const marker = L.marker([log.lat, log.lng], { icon: icon });
                     
+                    // Simplify location text to first comma
+                    const shortLocation = log.locationName ? log.locationName.split(',')[0] : '';
+                    
+                    // Improved compact popup structure
                     const popupContent = `
-                        <div class="text-base">
-                            <p class="font-bold">${isAnt ? USER_1_NAME : USER_2_NAME}</p>
-                            <p><span class="font-semibold">${log.steps.toLocaleString()}</span> steps</p>
-                            <p class="text-sm text-gray-600">${log.date.toDate().toLocaleDateString()}</p>
-                            ${log.note ? `<p class="mt-1 italic">"${log.note}"</p>` : ''}
-                            ${log.locationName ? `<p class="mt-1 text-xs text-gray-500">📍 ${log.locationName}</p>` : ''}
+                        <div class="text-sm font-sans">
+                            <div class="font-bold flex items-center gap-1 mb-1 border-b pb-1">
+                                <span class="${isAnt ? 'text-green-600' : 'text-purple-600'} text-base">${isAnt ? USER_1_NAME : USER_2_NAME}</span>
+                                <span class="text-gray-400 mx-1">•</span>
+                                <span>${log.steps.toLocaleString()}</span>
+                                <span class="text-gray-400 mx-1">•</span>
+                                <span class="text-gray-500 font-normal">${log.date.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short'})}</span>
+                            </div>
+                            
+                            ${log.note ? `<div class="italic text-gray-700 mb-1">"${log.note}"</div>` : ''}
+                            ${shortLocation ? `<div class="text-gray-500 text-xs flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg> ${shortLocation}</div>` : ''}
                         </div>`;
                     
-                    marker.bindPopup(popupContent);
+                    marker.bindPopup(popupContent, { maxWidth: 220 });
                     markers.addLayer(marker);
                 }
             });
