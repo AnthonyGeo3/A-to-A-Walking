@@ -100,6 +100,11 @@
         /* Map Marker Colors via CSS Filter */
         .marker-icon-ant { filter: hue-rotate(260deg) saturate(3) brightness(0.8); } /* Green-ish shift */
         .marker-icon-amy { filter: hue-rotate(420deg) saturate(2) brightness(0.9); } /* Purple-ish shift */
+
+        /* Heatmap Calendar */
+        .heatmap-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+        .heatmap-cell { aspect-ratio: 1; border-radius: 4px; font-size: 9px; display: flex; align-items: center; justify-content: center; position: relative; }
+        .heatmap-day-header { font-size: 9px; font-weight: 600; color: #9ca3af; text-align: center; padding: 2px 0; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-2 sm:p-4">
@@ -151,14 +156,23 @@
                     <p class="text-purple-600 font-bold"><span id="user2-avg-steps">0</span> / <span id="user2-predicted-steps">0</span></p>
                 </div>
             </div>
+            <div id="heatmap-container" class="mt-4"></div>
         </div>
 
         <!-- Passport -->
         <div class="border-t pt-6 mb-8">
             <h2 class="text-xl font-bold text-center text-gray-700 mb-4">🛂 Milestone Passport</h2>
-            <div id="passport-container" class="passport-bg rounded-xl p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                <!-- Stamps go here -->
+            <div class="relative">
+                <div id="passport-wrapper" class="overflow-hidden transition-all duration-300" style="max-height: 400px;">
+                    <div id="passport-container" class="passport-bg rounded-xl p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                        <!-- Stamps go here -->
+                    </div>
+                </div>
+                <div id="passport-fade" class="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none rounded-b-xl"></div>
             </div>
+            <button id="passport-toggle" class="hidden w-full mt-2 py-2 text-sm font-semibold text-gray-500 hover:text-gray-700 bg-gray-50 rounded-lg border border-gray-200 transition">
+                Show all stamps ▼
+            </button>
         </div>
 
         <!-- Stretch Goals -->
@@ -386,17 +400,51 @@
             `;
         }
 
+        let passportExpanded = false;
+
+        function getMilestoneAchievementDates() {
+            // Build cumulative totals per user from logs sorted oldest-first
+            const dates = {};
+            ['user1', 'user2'].forEach(uid => {
+                const userLogs = logData.filter(l => l.userId === uid).sort((a, b) => a.date.toMillis() - b.date.toMillis());
+                let cumulative = 0;
+                let milestoneIdx = 0;
+                const sorted = [...MASTER_MILESTONES].sort((a, b) => a.steps - b.steps);
+                userLogs.forEach(log => {
+                    cumulative += log.steps;
+                    while (milestoneIdx < sorted.length && cumulative >= sorted[milestoneIdx].steps) {
+                        const key = sorted[milestoneIdx].steps;
+                        if (!dates[key]) dates[key] = {};
+                        dates[key][uid] = log.date.toDate();
+                        milestoneIdx++;
+                    }
+                });
+            });
+            return dates;
+        }
+
         function renderPassport() {
             passportContainer.innerHTML = '';
             const unlocked = MASTER_MILESTONES.filter(m => userData.user1.steps >= m.steps || userData.user2.steps >= m.steps).sort((a,b)=>b.steps-a.steps);
+            const wrapper = document.getElementById('passport-wrapper');
+            const toggle = document.getElementById('passport-toggle');
+            const fade = document.getElementById('passport-fade');
             
-            if(unlocked.length === 0) { passportContainer.innerHTML = '<p class="col-span-full text-center text-gray-400 italic">No stamps yet!</p>'; return; }
+            if(unlocked.length === 0) { 
+                passportContainer.innerHTML = '<p class="col-span-full text-center text-gray-400 italic">No stamps yet!</p>'; 
+                toggle.classList.add('hidden');
+                fade.classList.add('hidden');
+                return; 
+            }
+
+            const milestoneDates = getMilestoneAchievementDates();
 
             unlocked.forEach(m => {
                 const ant = userData.user1.steps >= m.steps;
                 const amy = userData.user2.steps >= m.steps;
                 const div = document.createElement('div');
-                div.className = 'stamp';
+                div.className = 'stamp cursor-pointer';
+                div.dataset.steps = m.steps;
                 div.innerHTML = `
                     <p class="text-[10px] font-bold leading-tight px-1 mb-1 text-gray-800">${m.label}</p>
                     <div class="flex gap-2">
@@ -404,9 +452,57 @@
                         <span class="text-xs font-black ${amy?'text-purple-600':'text-gray-300'}">A</span>
                     </div>
                 `;
+                div.addEventListener('click', () => {
+                    const d = milestoneDates[m.steps] || {};
+                    const fmtDate = (date) => date ? date.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'2-digit'}) : '—';
+                    const antDate = d.user1;
+                    const amyDate = d.user2;
+                    showModal(m.label, `
+                        <div class="text-center py-2">
+                            <div class="text-3xl mb-2">${m.label.split(' ').pop()}</div>
+                            <p class="text-gray-600 mb-3">${m.description}</p>
+                            <p class="text-xs text-gray-400 mb-3">${m.steps.toLocaleString()} steps</p>
+                            <div class="flex justify-center gap-6">
+                                <div class="text-center">
+                                    <div class="text-sm font-bold ${ant?'text-green-600':'text-gray-300'}">Ant</div>
+                                    <div class="text-xs ${ant?'text-gray-600':'text-gray-300'}">${ant ? fmtDate(antDate) : 'Not yet'}</div>
+                                    ${antDate && (!amyDate || antDate <= amyDate) ? '<div class="text-[10px] text-green-600 font-bold mt-1">👑 First</div>' : ''}
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-sm font-bold ${amy?'text-purple-600':'text-gray-300'}">Amy</div>
+                                    <div class="text-xs ${amy?'text-gray-600':'text-gray-300'}">${amy ? fmtDate(amyDate) : 'Not yet'}</div>
+                                    ${amyDate && (!antDate || amyDate < antDate) ? '<div class="text-[10px] text-purple-600 font-bold mt-1">👑 First</div>' : ''}
+                                </div>
+                            </div>
+                        </div>`, () => {}, 'Close');
+                });
                 passportContainer.appendChild(div);
             });
+
+            // Collapsible logic - check if content overflows
+            const needsCollapse = unlocked.length > 6;
+            if (needsCollapse) {
+                toggle.classList.remove('hidden');
+                if (!passportExpanded) {
+                    wrapper.style.maxHeight = '400px';
+                    fade.classList.remove('hidden');
+                    toggle.textContent = `Show all ${unlocked.length} stamps ▼`;
+                } else {
+                    wrapper.style.maxHeight = wrapper.scrollHeight + 'px';
+                    fade.classList.add('hidden');
+                    toggle.textContent = 'Collapse ▲';
+                }
+            } else {
+                wrapper.style.maxHeight = 'none';
+                toggle.classList.add('hidden');
+                fade.classList.add('hidden');
+            }
         }
+
+        document.getElementById('passport-toggle').addEventListener('click', () => {
+            passportExpanded = !passportExpanded;
+            renderPassport();
+        });
 
         function renderLogs() {
             const logs = [...logData].sort((a,b) => b.date.toMillis() - a.date.toMillis());
@@ -492,6 +588,81 @@
                 if (avgTarget) avgTarget.textContent = Math.round(averageSteps).toLocaleString();
                 if (predTarget) predTarget.textContent = Math.round(predictedSteps).toLocaleString();
             });
+        }
+
+        function renderHeatmap() {
+            const container = document.getElementById('heatmap-container');
+            const filterValue = document.getElementById('stats-filter').value;
+            const today = new Date();
+
+            let year, month;
+            if (filterValue === 'all') {
+                year = today.getFullYear();
+                month = today.getMonth();
+            } else {
+                const parts = filterValue.split('-');
+                year = parseInt(parts[0]);
+                month = parseInt(parts[1]);
+            }
+
+            // Build per-day step totals for each user
+            const dayTotals = { user1: {}, user2: {} };
+            logData.forEach(log => {
+                const d = log.date.toDate();
+                if (d.getFullYear() === year && d.getMonth() === month) {
+                    const day = d.getDate();
+                    dayTotals[log.userId][day] = (dayTotals[log.userId][day] || 0) + log.steps;
+                }
+            });
+
+            // Find max steps in month for intensity scaling
+            const allValues = [...Object.values(dayTotals.user1), ...Object.values(dayTotals.user2)];
+            const maxSteps = Math.max(...allValues, 1);
+
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const firstDayOfWeek = (new Date(year, month, 1).getDay() + 6) % 7; // Mon=0
+            const monthName = new Date(year, month).toLocaleString('default', { month: 'long', year: 'numeric' });
+
+            const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+            let html = `<p class="text-xs font-semibold text-gray-500 text-center mb-2">${monthName}</p>`;
+            html += '<div class="grid grid-cols-2 gap-3">';
+
+            ['user1', 'user2'].forEach(uid => {
+                const color = uid === 'user1' ? 'green' : 'purple';
+                const rgb = uid === 'user1' ? '34, 197, 94' : '168, 85, 247';
+                const name = uid === 'user1' ? 'Ant' : 'Amy';
+
+                html += `<div>`;
+                html += `<p class="text-[10px] font-bold text-${color}-600 text-center mb-1">${name}</p>`;
+                html += '<div class="heatmap-grid">';
+
+                // Day headers
+                dayLabels.forEach(d => { html += `<div class="heatmap-day-header">${d}</div>`; });
+
+                // Empty cells before first day
+                for (let i = 0; i < firstDayOfWeek; i++) {
+                    html += '<div class="heatmap-cell"></div>';
+                }
+
+                // Day cells
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const steps = dayTotals[uid][d] || 0;
+                    const intensity = steps > 0 ? Math.max(0.15, Math.min(1, steps / maxSteps)) : 0;
+                    const isToday = d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                    const bg = steps > 0 ? `rgba(${rgb}, ${intensity})` : '#f3f4f6';
+                    const border = isToday ? `border: 1.5px solid rgba(${rgb}, 0.8);` : '';
+                    const textColor = intensity > 0.5 ? 'color: white;' : 'color: #9ca3af;';
+                    const title = steps > 0 ? `${steps.toLocaleString()} steps` : 'No steps';
+
+                    html += `<div class="heatmap-cell" style="background: ${bg}; ${border} ${textColor}" title="${d} ${monthName}: ${title}">${d}</div>`;
+                }
+
+                html += '</div></div>';
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
         }
         
         function renderMap() {
@@ -768,6 +939,7 @@
             renderPassport();
             renderLogs();
             calculateAndRenderStats();
+            renderHeatmap();
             renderStretch();
             renderHighScores();
             renderMap();
