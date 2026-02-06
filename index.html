@@ -474,6 +474,7 @@
                             <p><span class="font-semibold">${log.steps.toLocaleString()}</span> steps</p>
                             <p class="text-sm text-gray-600">${log.date.toDate().toLocaleDateString()}</p>
                             ${log.note ? `<p class="mt-1 italic">"${log.note}"</p>` : ''}
+                            ${log.locationName ? `<p class="mt-1 text-xs text-gray-500">📍 ${log.locationName}</p>` : ''}
                         </div>`;
                     
                     marker.bindPopup(popupContent);
