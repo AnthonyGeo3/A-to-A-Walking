@@ -13,173 +13,141 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8; /* Light blue-gray background */
-        }
-        .progress-bar-container {
-            height: 60vh;
-            min-height: 400px;
-            width: 80px; /* Narrower bars for mobile */
-        }
-        @media (min-width: 640px) {
-            .progress-bar-container {
-                width: 100px; /* Wider bars on larger screens */
-            }
+            background-color: #f0f4f8;
         }
         .progress-bar-track {
             background-color: #e0e0e0;
-            border: 2px solid #d1d5db; /* Lighter border */
+            border: 2px solid #d1d5db;
+            height: 48px;
+            border-radius: 9999px;
+            position: relative;
         }
         .progress-bar-fill-ant {
-            background: linear-gradient(to top, #4ade80, #34d399); /* Green gradient */
-            transition: height 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+            background: linear-gradient(to right, #4ade80, #34d399);
+            transition: width 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+            height: 100%;
+            border-radius: 9999px;
         }
         .progress-bar-fill-amy {
-            background: linear-gradient(to top, #a855f7, #9333ea); /* Purple gradient */
-            transition: height 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+            background: linear-gradient(to right, #a855f7, #9333ea);
+            transition: width 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+            height: 100%;
+            border-radius: 9999px;
         }
-        .milestone {
-            opacity: 0;
-            transition: all 0.5s ease-in-out;
+        .peer-marker {
+            position: absolute;
+            top: -8px;
+            transform: translateX(-50%);
+            transition: left 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+            z-index: 10;
         }
-        .milestone-line {
-            width: 20px;
-            height: 2px;
-            background-color: #6b7280;
+        .passport-bg {
+            background-color: #fdf6e3;
+            background-image: radial-gradient(#d3c9b1 0.5px, transparent 0.5px);
+            background-size: 20px 20px;
+            border: 2px solid #d3c9b1;
         }
-        .milestone-text {
-            /* Allow text to wrap */
-            white-space: normal;
-        }
-        .milestone.visible {
-            opacity: 1;
-        }
-        /* New style for passed milestones */
-        .milestone.passed {
-            opacity: 0.5; /* Fade out passed milestones but keep readable */
-        }
-        .milestone.passed .milestone-text {
-            /* display: none;  <-- REMOVED: Keep text visible */
-            font-size: 0.6rem; /* Shrink text for passed milestones */
-            line-height: 1;
-        }
-        /* Peer milestone style */
-        .milestone.peer {
-            opacity: 1 !important; /* Always visible */
-            z-index: 10; /* On top of others */
-        }
-        .milestone.peer .milestone-line {
-            height: 3px; /* Slightly thicker */
-        }
-        .milestone.peer .milestone-text {
-            font-weight: bold;
-        }
-        .stretch-goal-card {
-            transition: all 0.5s ease;
-            border-left-width: 4px;
-        }
-        .stretch-goal-card.achieved {
-            border-left-color: #f59e0b; /* Amber color for achieved */
-            transform: scale(1.03);
+        .stamp {
+            border: 3px double #8b7355;
+            background: rgba(255, 255, 255, 0.5);
+            transition: all 0.3s ease;
         }
         .log-entry {
             transition: background-color 0.2s ease-in-out;
         }
-        .log-entry:hover {
-            background-color: #f9fafb;
-        }
-        .log-actions button {
-            opacity: 0.5;
-            transition: opacity 0.2s ease-in-out;
-        }
-        .log-entry:hover .log-actions button {
-            opacity: 1;
-        }
         #map {
-            z-index: 1; /* Ensures map tiles render correctly */
+            z-index: 1;
         }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-2 sm:p-4">
 
-    <div class="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-6 md:p-8">
+    <div class="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-4 sm:p-8">
 
         <!-- Header -->
         <div class="text-center mb-6">
             <h1 class="text-3xl md:text-4xl font-bold text-gray-800">A to A Walking!</h1>
-            <p class="text-gray-500 mt-2">Walking Challenge: 1st Oct 2025 - 1st Oct 2026</p>
+            <p class="text-gray-500 mt-2 italic">Est. Oct 25</p>
         </div>
 
-        <!-- User Selection and Input Form -->
-        <div class="bg-gray-50 p-6 rounded-xl shadow-inner mb-8">
-            <h2 class="text-xl font-semibold text-center mb-4">Log Your Daily Steps</h2>
-            <div class="flex justify-center gap-4 mb-4" id="user-selector">
-                <!-- User buttons will be inserted here -->
-            </div>
+        <!-- Log Steps Section -->
+        <div class="bg-gray-50 p-4 sm:p-6 rounded-xl shadow-inner mb-8">
+            <h2 class="text-lg font-semibold text-center mb-4">Log Daily Steps</h2>
+            <div class="flex justify-center gap-4 mb-4" id="user-selector"></div>
             <form id="step-form" class="hidden flex flex-col sm:flex-row items-center justify-center gap-3">
-                <input type="number" id="step-input" placeholder="Enter today's steps" class="w-full sm:w-64 text-center p-3 border border-gray-300 rounded-lg focus:border-transparent transition" required min="1">
-                <button type="submit" class="w-full sm:w-auto text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 shadow">
+                <input type="number" id="step-input" placeholder="0 steps" class="w-full sm:w-48 text-center p-3 border border-gray-300 rounded-lg focus:border-transparent transition" required min="1">
+                <button type="submit" class="w-full sm:w-auto text-white font-bold py-3 px-6 rounded-lg transition-all shadow-md active:scale-95">
                     Add Steps
                 </button>
             </form>
             <p id="feedback-message" class="text-center text-green-600 font-medium mt-3 h-5"></p>
         </div>
 
-
-        <!-- Progress Display -->
-        <div class="flex flex-row justify-center items-end gap-2 px-1">
-            <!-- User 1 Progress -->
-            <div id="user1-progress" class="flex flex-col items-center w-auto"></div>
-            <!-- User 2 Progress -->
-            <div id="user2-progress" class="flex flex-col items-center w-auto"></div>
+        <!-- Progress Bars Section -->
+        <div class="space-y-8 mb-10 px-2">
+            <!-- Ant's Row -->
+            <div id="ant-progress-row" class="w-full">
+                <!-- Content generated by JS -->
+            </div>
+            <!-- Amy's Row -->
+            <div id="amy-progress-row" class="w-full">
+                <!-- Content generated by JS -->
+            </div>
         </div>
 
         <!-- Stats Section -->
-        <div class="mt-12 pt-8 border-t border-gray-200">
-            <h2 class="text-2xl font-bold text-center text-gray-700 mb-4">Stats</h2>
-            <div class="flex justify-center mb-6">
-                <select id="stats-filter" class="p-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500">
-                    <!-- Options will be populated by JS -->
+        <div class="mt-8 pt-8 border-t border-gray-200">
+            <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                <h2 class="text-2xl font-bold text-gray-700">Stats</h2>
+                <select id="stats-filter" class="p-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 w-full sm:w-auto">
                 </select>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-center">
-                <!-- Ant's Stats -->
-                <div>
-                    <h3 class="text-xl font-semibold mb-2">Ant's Stats</h3>
-                    <div class="bg-gray-50 p-4 rounded-lg grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
+                <!-- Ant Stats -->
+                <div class="bg-green-50 p-3 rounded-lg border border-green-100">
+                    <p class="text-[10px] uppercase tracking-wider text-green-700 font-bold mb-2">Ant</p>
+                    <div class="grid grid-cols-2 gap-2">
                         <div>
-                            <p class="text-sm text-gray-500">Average Daily</p>
-                            <p id="user1-avg-steps" class="text-2xl font-bold text-green-600">0</p>
+                            <p class="text-xs text-gray-500">Average</p>
+                            <p id="user1-avg-steps" class="text-lg font-bold text-green-600">0</p>
                         </div>
                         <div>
-                            <p class="text-sm text-gray-500">Predicted Total</p>
-                            <p id="user1-predicted-steps" class="text-2xl font-bold text-green-600">0</p>
+                            <p class="text-xs text-gray-500">Predicted</p>
+                            <p id="user1-predicted-steps" class="text-lg font-bold text-green-600">0</p>
                         </div>
                     </div>
                 </div>
-                <!-- Amy's Stats -->
-                <div>
-                    <h3 class="text-xl font-semibold mb-2">Amy's Stats</h3>
-                    <div class="bg-gray-50 p-4 rounded-lg grid grid-cols-2 gap-4">
+                <!-- Amy Stats -->
+                <div class="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                    <p class="text-[10px] uppercase tracking-wider text-purple-700 font-bold mb-2">Amy</p>
+                    <div class="grid grid-cols-2 gap-2">
                         <div>
-                            <p class="text-sm text-gray-500">Average Daily</p>
-                            <p id="user2-avg-steps" class="text-2xl font-bold text-purple-600">0</p>
+                            <p class="text-xs text-gray-500">Average</p>
+                            <p id="user2-avg-steps" class="text-lg font-bold text-purple-600">0</p>
                         </div>
                         <div>
-                            <p class="text-sm text-gray-500">Predicted Total</p>
-                            <p id="user2-predicted-steps" class="text-2xl font-bold text-purple-600">0</p>
+                            <p class="text-xs text-gray-500">Predicted</p>
+                            <p id="user2-predicted-steps" class="text-lg font-bold text-purple-600">0</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- Passport Section -->
+        <div class="mt-12 pt-8 border-t border-gray-200">
+            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6 flex items-center justify-center gap-2">
+                <span>🛂</span> Passport
+            </h2>
+            <div id="passport-container" class="passport-bg rounded-2xl p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[100px]">
+                <!-- Stamps injected here -->
+            </div>
+        </div>
 
         <!-- Stretch Goals Section -->
         <div class="mt-12 pt-8 border-t border-gray-200">
             <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Stretch Goals</h2>
-            <div id="stretch-goals-container" class="space-y-4">
-                <!-- Stretch goals will be inserted here -->
-            </div>
+            <div id="stretch-goals-container" class="space-y-4"></div>
         </div>
 
         <!-- High Score Section -->
@@ -203,15 +171,15 @@
         
         <!-- Log Section -->
         <div class="mt-12 pt-8 border-t border-gray-200">
-            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Log</h2>
-            <div class="grid grid-cols-2 gap-4">
+            <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Daily Log</h2>
+            <div class="grid grid-cols-2 gap-2 sm:gap-4">
                 <div>
-                    <h3 class="text-xl font-semibold text-center mb-4">Ant's Log</h3>
-                    <div id="user1-log" class="space-y-2 max-h-96 overflow-y-auto pr-2"></div>
+                    <h3 class="text-sm font-bold text-center mb-4 text-green-700 bg-green-100 py-1 rounded">Ant</h3>
+                    <div id="user1-log" class="space-y-2 max-h-96 overflow-y-auto"></div>
                 </div>
                 <div>
-                    <h3 class="text-xl font-semibold text-center mb-4">Amy's Log</h3>
-                    <div id="user2-log" class="space-y-2 max-h-96 overflow-y-auto pr-2"></div>
+                    <h3 class="text-sm font-bold text-center mb-4 text-purple-700 bg-purple-100 py-1 rounded">Amy</h3>
+                    <div id="user2-log" class="space-y-2 max-h-96 overflow-y-auto"></div>
                 </div>
             </div>
         </div>
@@ -219,7 +187,7 @@
         <!-- Map Section -->
         <div class="mt-12 pt-8 border-t border-gray-200">
             <h2 class="text-2xl font-bold text-center text-gray-700 mb-6">Our Journey</h2>
-            <div id="map" class="h-96 w-full rounded-lg shadow-md"></div>
+            <div id="map" class="h-64 sm:h-96 w-full rounded-lg shadow-md"></div>
         </div>
     </div>
     
@@ -228,10 +196,10 @@
         <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md relative">
             <h3 class="text-2xl font-bold text-gray-800 mb-4">Add a Note</h3>
             <form id="note-form">
-                <textarea id="note-input" maxlength="150" class="w-full p-2 border border-gray-300 rounded-lg h-24 resize-none" placeholder="What did you do today? (max 150 chars)"></textarea>
+                <textarea id="note-input" maxlength="150" class="w-full p-2 border border-gray-300 rounded-lg h-24 resize-none" placeholder="Details..."></textarea>
                 <div class="flex justify-end gap-3 mt-4">
-                    <button type="button" id="note-cancel" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
-                    <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Save</button>
+                    <button type="button" id="note-cancel" class="bg-gray-200 p-2 rounded-lg">Cancel</button>
+                    <button type="submit" class="bg-green-500 text-white p-2 rounded-lg font-bold">Save</button>
                 </div>
             </form>
         </div>
@@ -243,8 +211,8 @@
             <form id="date-form">
                 <input type="date" id="date-input" class="w-full p-2 border border-gray-300 rounded-lg">
                 <div class="flex justify-end gap-3 mt-4">
-                    <button type="button" id="date-cancel" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
-                    <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Save</button>
+                    <button type="button" id="date-cancel" class="bg-gray-200 p-2 rounded-lg">Cancel</button>
+                    <button type="submit" class="bg-green-500 text-white p-2 rounded-lg font-bold">Save</button>
                 </div>
             </form>
         </div>
@@ -282,90 +250,39 @@
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, deleteDoc, query, where, orderBy, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // --- ⚙️ CUSTOMIZE YOUR CHALLENGE HERE ⚙️ ---
+        // --- ⚙️ CHALLENGE DATA ---
         const USER_1_NAME = "Ant";
         const USER_2_NAME = "Amy";
-        const MILESTONES = {};
-        const SHARED_STRETCH_GOALS = [];
-        const INDIVIDUAL_STRETCH_GOALS = {};
-
-        MILESTONES.user1 = [
-            { steps: 8073, label: "To Amy's parents! 👋" },
-            { steps: 37063, label: "Amy's long walk to her parents! 🚶‍♀️" },
-            { steps: 54854, label: "That's a marathon! 🏃‍♂️" },
-            { steps: 130000, label: "Hello Birmingham! 🏙️" },
-            { steps: 156000, label: "A full day of walking! ☀️🌙" },
-            { steps: 227708, label: "Welcome to Cardiff! 🐉" },
-            { steps: 256100, label: "To my parents' place! 🏠" },
-            { steps: 283335, label: "Top of the mornin', Dublin! 🍀" },
-            { steps: 342212, label: "London calling! 💂" },
-            { steps: 418483, label: "Och aye, Edinburgh! 🏰" },
+        
+        // Combined Milestone List for Passport Logic
+        // We'll use this to check which stamps to show
+        const MASTER_MILESTONES = [
+            { steps: 8073, label: "To the In-laws! 🏡" },
+            { steps: 37063, label: "Long parental trek! 🚶‍♂️" },
+            { steps: 54854, label: "The Marathon! 🏃‍♀️" },
+            { steps: 130000, label: "Birmingham! 🏙️" },
+            { steps: 156000, label: "The 24h Walk! 🌙" },
+            { steps: 227708, label: "Cardiff Reached! 🐉" },
+            { steps: 283335, label: "Dublin crossing! 🍀" },
+            { steps: 342212, label: "London Town! 💂" },
+            { steps: 418483, label: "Edinburgh Castle! 🏰" },
             { steps: 480597, label: "Channel Tunnel! 🚇" },
-            { steps: 520000, label: "We've walked to the ISS! 🛰️" },
-            { steps: 537316, label: "Bonjour, Calais! 🇫🇷" },
-            { steps: 616174, label: "Fairytale Bruges! 🏰" },
-            { steps: 700167, label: "Hello Amsterdam! 🚲" },
-            { steps: 731601, label: "Brussels Sprouts! 😄" },
-            { steps: 751023, label: "The outskirts of Paris! 🥐" },
-            { steps: 784043, label: "Eiffel Tower! We made it! 🎉" },
-            { steps: 836859, label: "The Long Walk! 🚶‍♂️👑" },
-            { steps: 954265, label: "Goal! Dortmund! ⚽" },
-            { steps: 1092000, label: "A whole week of walking! 🗓️" },
-            { steps: 1145118, label: "Paris to Berlin! 🥖🍺" },
-            { steps: 1259557, label: "Length of the UK! 🇬🇧" },
-            { steps: 1365312, label: "Wonderful Copenhagen! 🧜‍♀️" },
-            { steps: 1434914, label: "We're in Berlin! 🐻" },
-            { steps: 1480427, label: "Greetings from Oslo! 🇳🇴" },
-            { steps: 1595568, label: "Fashion capital Milan! 🇮🇹" },
-            { steps: 1716000, label: "£100M in tenners, laid end to end! 💰" },
-            { steps: 1761643, label: "Hola, Barcelona! ☀️" },
-            { steps: 1913990, label: "Florence, city of art! 🎨" },
-            { steps: 2206035, label: "When in Rome... 🏛️" },
-            { steps: 3437785, label: "Ancient Athens! 🇬🇷" },
-            { steps: 3766100, label: "Shire to Mordor! 🌋" },
-            { steps: 4469179, label: "Paphos, Cyprus! 🇨🇾" },
-        ];
-        MILESTONES.user2 = [
-            { steps: 8073, label: "Ants' to my parents' house! ❤️" },
-            { steps: 37063, label: "Visiting my parents! 🏡" },
-            { steps: 54854, label: "Marathon complete! ✅" },
-            { steps: 130000, label: "Reached Birmingham! ✨" },
-            { steps: 156000, label: "24 hours on our feet! 👣" },
-            { steps: 227708, label: "Made it to Cardiff! 🏴󠁧󠁢󠁷󠁬󠁳󠁿" },
-            { steps: 256100, label: "Visiting Ant's parents! 👋" },
-            { steps: 283335, label: "Hello Dublin! 🇮🇪" },
-            { steps: 342212, label: "We've reached London townnn! 🇬🇧" },
-            { steps: 418483, label: "Hello from Edinburgh! 🏴󠁧󠁢󠁳󠁣󠁴󠁿" },
-            { steps: 480597, label: "Crossing the channel! 🌊" },
-            { steps: 520000, label: "Up to the ISS! 🌍" },
-            { steps: 537316, label: "First stop in France! ✨" },
-            { steps: 616174, label: "In Bruges! 🇧🇪" },
-            { steps: 700167, label: "Greetings from Amsterdam! 🇳🇱" },
-            { steps: 731601, label: "Made it to Brussels! 🇧🇪" },
-            { steps: 751023, label: "Almost there! Paris border! 🗼" },
-            { steps: 784043, label: "Paris is ours! 🇫🇷❤️" },
+            { steps: 520000, label: "Reached the ISS! 🛰️" },
+            { steps: 537316, label: "Bienvenue à Calais! 🇫🇷" },
+            { steps: 616174, label: "Bruges Market! 🏰" },
+            { steps: 700167, label: "Amsterdam Canals! 🚲" },
+            { steps: 731601, label: "Brussels Base! 🇧🇪" },
+            { steps: 751023, label: "Paris Border! 🗼" },
+            { steps: 784043, label: "Eiffel Tower! 🎉" },
             { steps: 836859, label: "The Long Walk! 🎞️" },
-            { steps: 954265, label: "Hello Dortmund! 🇩🇪" },
-            { steps: 1092000, label: "7 days straight walking! 🏅" },
-            { steps: 1145118, label: "From Paris to Berlin! 🕺" },
-            { steps: 1259557, label: "John o' Groats to Land's End! 💪" },
-            { steps: 1365312, label: "Hello Denmark! 🇩🇰" },
-            { steps: 1434914, label: "Reached Berlin! 🇩🇪" },
-            { steps: 1480427, label: "Hello Norway! 🏔️" },
-            { steps: 1595568, label: "Ciao, Milano! 🛍️" },
-            { steps: 1716000, label: "That's a lot of money! 💸" },
-            { steps: 1761643, label: "Beautiful Barcelona! 🇪🇸" },
-            { steps: 1913990, label: "Hello, Firenze! 🇮🇹" },
-            { steps: 2206035, label: "All roads lead to Rome! 🇮🇹" },
-            { steps: 3437785, label: "Greetings from Athens! ✨" },
-            { steps: 3766100, label: "One does not simply walk into Mordor... but we did! 👣" },
-            { steps: 4469179, label: "Sunshine in Paphos! ☀️" },
+            { steps: 954265, label: "Dortmund Goal! ⚽" }
         ];
 
-        SHARED_STRETCH_GOALS.push({ steps: 1000000, label: "Book Disneyland Paris!", reward: "🏰🐭" });
-        INDIVIDUAL_STRETCH_GOALS.user1 = [{ steps: 1500000, label: "New Graphics Card!", reward: "💻" }];
-        INDIVIDUAL_STRETCH_GOALS.user2 = [{ steps: 1500000, label: "New Pair of Heels!", reward: "👠" }];
-        // --- End of Customization ---
+        const SHARED_STRETCH_GOALS = [{ steps: 1000000, label: "Book Disneyland Paris!", reward: "🏰🐭" }];
+        const INDIVIDUAL_STRETCH_GOALS = {
+            user1: [{ steps: 1500000, label: "New Graphics Card!", reward: "💻" }],
+            user2: [{ steps: 1500000, label: "New Pair of Heels!", reward: "👠" }]
+        };
 
         const firebaseConfig = typeof __firebase_config !== 'undefined'
             ? JSON.parse(__firebase_config)
@@ -384,6 +301,12 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
         
+        // --- Firestore References (MOVED HERE to avoid ReferenceError) ---
+        const publicDataCollection = collection(db, 'artifacts', appId, 'public', 'data', 'challengeData');
+        const user1DocRef = doc(publicDataCollection, 'user1');
+        const user2DocRef = doc(publicDataCollection, 'user2');
+        const logsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'challengeLogs');
+
         let currentUser = null;
         let userData = { user1: { name: USER_1_NAME, steps: 0 }, user2: { name: USER_2_NAME, steps: 0 }};
         let logData = [];
@@ -394,7 +317,8 @@
         const stepForm = document.getElementById('step-form');
         const stepInput = document.getElementById('step-input');
         const feedbackMessage = document.getElementById('feedback-message');
-        const stretchGoalsContainer = document.getElementById('stretch-goals-container');
+        const statsFilter = document.getElementById('stats-filter');
+        const passportContainer = document.getElementById('passport-container');
         const user1LogContainer = document.getElementById('user1-log');
         const user2LogContainer = document.getElementById('user2-log');
         const user1HighScoreContainer = document.getElementById('user1-highscore');
@@ -420,18 +344,11 @@
         const dateInput = document.getElementById('date-input');
         const dateCancelBtn = document.getElementById('date-cancel');
         
-        const statsFilter = document.getElementById('stats-filter');
         const user1AvgSteps = document.getElementById('user1-avg-steps');
         const user2AvgSteps = document.getElementById('user2-avg-steps');
         const user1PredictedSteps = document.getElementById('user1-predicted-steps');
         const user2PredictedSteps = document.getElementById('user2-predicted-steps');
         
-        // --- Firestore References ---
-        const publicDataCollection = collection(db, 'artifacts', appId, 'public', 'data', 'challengeData');
-        const user1DocRef = doc(publicDataCollection, 'user1');
-        const user2DocRef = doc(publicDataCollection, 'user2');
-        const logsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'challengeLogs');
-
         // --- Logic ---
 
         async function initializeUserDocs() {
@@ -443,100 +360,99 @@
         }
         
         function getAllGoalsForUser(userKey) {
-            const userMilestones = MILESTONES[userKey] || [];
+            // FIXED: Use MASTER_MILESTONES instead of undefined MILESTONES
+            const userMilestones = MASTER_MILESTONES;
             const userStretchGoals = INDIVIDUAL_STRETCH_GOALS[userKey] || [];
             return [...userMilestones, ...SHARED_STRETCH_GOALS, ...userStretchGoals].sort((a, b) => a.steps - b.steps);
         }
 
-        // --- UI Rendering ---
+        // --- Render Helpers ---
 
-        function renderProgress(containerId, userKey) {
-            const user = userData[userKey];
-            const otherUserKey = userKey === 'user1' ? 'user2' : 'user1';
-            const otherUser = userData[otherUserKey];
-            
-            const container = document.getElementById(containerId);
-            const allUserGoals = getAllGoalsForUser(userKey);
-            const nextGoal = allUserGoals.find(g => user.steps < g.steps) || allUserGoals[allUserGoals.length - 1] || { steps: 784043 }; // Fallback to Eiffel Tower
-            const displayGoal = nextGoal.steps;
-            const progressPercent = displayGoal > 0 ? Math.min((user.steps / displayGoal) * 100, 100) : 0;
-            const formattedSteps = user.steps.toLocaleString();
-            const formattedDisplayGoal = displayGoal.toLocaleString();
-            const fillClass = userKey === 'user1' ? 'progress-bar-fill-ant' : 'progress-bar-fill-amy';
-            
-            const isAnt = userKey === 'user1';
-            const milestoneContainerPosition = isAnt ? 'right-full' : 'left-full';
-            const milestoneTextAlign = isAnt ? 'text-right' : 'text-left';
-            
-            const diffSteps = Math.max(0, displayGoal - user.steps).toLocaleString();
-
-            // Peer progress calculation
-            const peerPercent = displayGoal > 0 ? Math.min((otherUser.steps / displayGoal) * 100, 100) : 0;
-            // Peer color logic: if rendering Ant's bar, show Amy (purple) peer marker. If Amy's, show Ant (green).
-            const peerColorClass = isAnt ? 'text-purple-600' : 'text-green-600';
-            const peerBgClass = isAnt ? 'bg-purple-600' : 'bg-green-600';
-            const peerName = isAnt ? USER_2_NAME : USER_1_NAME;
-            
-            // Peer marker HTML
-            // Position: bottom percent. 
-            // If Ant's bar, marker goes on LEFT (inside bar? or edge?). 
-            // Let's put it slightly overlapping the bar on the side opposite the text? 
-            // Actually, standard milestones are outside. Let's put the peer marker ON the bar or right on the edge.
-            // Let's put it strictly ON the bar line, maybe a line across or a dot.
-            // "on Amys side there would be a green milestone that says Ant" -> implies separate marker.
-            // Let's position it inside the bar track but visible.
-            
-            const peerMarkerHtml = `
-                <div class="absolute w-full flex items-center ${isAnt ? 'justify-start' : 'justify-end'}" style="bottom: calc(${peerPercent}% - 10px); z-index: 20;">
-                     <div class="${peerBgClass} text-white text-[10px] font-bold px-1 py-0.5 rounded shadow-sm flex items-center">
-                        ${isAnt ? '◄ ' + peerName : peerName + ' ►'}
-                     </div>
-                </div>
-            `;
-
-            container.innerHTML = `
-                <h3 class="text-2xl font-bold mb-3">${user.name}</h3>
-                <div class="relative progress-bar-container flex justify-center">
-                    <div class="w-full progress-bar-track rounded-full overflow-hidden relative">
-                        <div class="${fillClass} w-full absolute bottom-0" style="height: ${progressPercent}%"></div>
-                        ${peerMarkerHtml}
-                    </div>
-                    <div id="${userKey}-milestones" class="absolute top-0 ${milestoneContainerPosition} w-24 sm:w-32 h-full ${milestoneTextAlign}"></div>
-                </div>
-                <div class="text-center mt-3">
-                    <p class="text-xl font-semibold">${formattedSteps}</p>
-                    <p class="text-sm text-gray-500">/ ${formattedDisplayGoal} <br>(${diffSteps} to go)</p>
-                </div>
-            `;
-            renderMilestones(`${userKey}-milestones`, displayGoal, userKey);
+        function getNextGoal(steps) {
+            const allGoals = [...MASTER_MILESTONES, ...SHARED_STRETCH_GOALS].sort((a,b) => a.steps - b.steps);
+            return allGoals.find(g => steps < g.steps) || allGoals[allGoals.length-1];
         }
 
-        function renderMilestones(containerId, displayGoal, userKey) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = '';
-            const allMilestones = getAllGoalsForUser(userKey);
-            const isAnt = userKey === 'user1';
-            const user = userData[userKey];
+        function renderBars() {
+            const antGoal = getNextGoal(userData.user1.steps);
+            const amyGoal = getNextGoal(userData.user2.steps);
 
-            allMilestones.forEach(milestone => {
-                const percent = displayGoal > 0 ? (milestone.steps / displayGoal) * 100 : 0;
-                const isPassed = user.steps >= milestone.steps;
+            // Ant Bar
+            const antProgress = Math.min(100, (userData.user1.steps / antGoal.steps) * 100);
+            const antPeerPos = Math.min(100, (userData.user2.steps / antGoal.steps) * 100);
+            
+            document.getElementById('ant-progress-row').innerHTML = `
+                <div class="flex justify-between items-end mb-1">
+                    <span class="font-bold text-green-700">${USER_1_NAME}</span>
+                    <span class="text-xs text-gray-500 font-medium">${antGoal.label}</span>
+                </div>
+                <div class="progress-bar-track overflow-visible">
+                    <div class="progress-bar-fill-ant" style="width: ${antProgress}%"></div>
+                    <div class="peer-marker" style="left: ${antPeerPos}%">
+                        <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-purple-600"></div>
+                    </div>
+                </div>
+                <div class="text-[10px] flex justify-between mt-1 text-gray-500">
+                    <span>${userData.user1.steps.toLocaleString()} steps</span>
+                    <span>${(antGoal.steps - userData.user1.steps).toLocaleString()} to go</span>
+                </div>
+            `;
+
+            // Amy Bar
+            const amyProgress = Math.min(100, (userData.user2.steps / amyGoal.steps) * 100);
+            const amyPeerPos = Math.min(100, (userData.user1.steps / amyGoal.steps) * 100);
+
+            document.getElementById('amy-progress-row').innerHTML = `
+                <div class="flex justify-between items-end mb-1">
+                    <span class="font-bold text-purple-700">${USER_2_NAME}</span>
+                    <span class="text-xs text-gray-500 font-medium">${amyGoal.label}</span>
+                </div>
+                <div class="progress-bar-track overflow-visible">
+                    <div class="progress-bar-fill-amy" style="width: ${amyProgress}%"></div>
+                    <div class="peer-marker" style="left: ${amyPeerPos}%">
+                        <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-green-600"></div>
+                    </div>
+                </div>
+                <div class="text-[10px] flex justify-between mt-1 text-gray-500">
+                    <span>${userData.user2.steps.toLocaleString()} steps</span>
+                    <span>${(amyGoal.steps - userData.user2.steps).toLocaleString()} to go</span>
+                </div>
+            `;
+        }
+
+        function renderPassport() {
+            passportContainer.innerHTML = '';
+            // Only show milestones where at least one person has reached it
+            const unlocked = MASTER_MILESTONES.filter(m => 
+                userData.user1.steps >= m.steps || userData.user2.steps >= m.steps
+            ).sort((a,b) => b.steps - a.steps); // Newest first
+
+            if(unlocked.length === 0) {
+                passportContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full italic py-10">Waiting for your first stamp! 👣</p>';
+                return;
+            }
+
+            unlocked.forEach(m => {
+                const antDone = userData.user1.steps >= m.steps;
+                const amyDone = userData.user2.steps >= m.steps;
                 
-                if (percent <= 105) {
-                    const milestoneEl = document.createElement('div');
-                    milestoneEl.className = `milestone absolute flex items-center w-full ${isPassed ? 'passed' : ''}`;
-                    milestoneEl.style.bottom = `calc(${percent}% - 8px)`;
-                    
-                    if (isAnt) {
-                        milestoneEl.style.transform = 'translateX(-10px)';
-                        milestoneEl.classList.add('justify-end');
-                        milestoneEl.innerHTML = `<span class="milestone-text text-xs text-gray-600 font-medium mr-2">${milestone.label}</span><div class="milestone-line"></div>`;
-                    } else {
-                        milestoneEl.style.transform = 'translateX(10px)';
-                        milestoneEl.innerHTML = `<div class="milestone-line"></div><span class="milestone-text text-xs text-gray-600 font-medium ml-2">${milestone.label}</span>`;
-                    }
-                    container.appendChild(milestoneEl);
-                }
+                const stamp = document.createElement('div');
+                stamp.className = 'stamp rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm';
+                stamp.innerHTML = `
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter mb-1">Milestone</p>
+                    <p class="text-sm font-bold text-gray-800 leading-tight mb-2">${m.label}</p>
+                    <div class="flex gap-4">
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs font-black ${antDone ? 'text-green-500' : 'text-gray-300'}">A</span>
+                            <span class="text-[8px] text-gray-400">Ant</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs font-black ${amyDone ? 'text-purple-500' : 'text-gray-300'}">A</span>
+                            <span class="text-[8px] text-gray-400">Amy</span>
+                        </div>
+                    </div>
+                `;
+                passportContainer.appendChild(stamp);
             });
         }
 
@@ -547,7 +463,7 @@
             const sortedLogs = [...logData].sort((a, b) => b.date.toMillis() - a.date.toMillis());
 
             sortedLogs.forEach(log => {
-                const logContainer = log.userId === 'user1' ? user1LogContainer : user2LogContainer;
+                const container = log.userId === 'user1' ? user1LogContainer : user2LogContainer;
                 const entryEl = document.createElement('div');
                 entryEl.className = 'log-entry p-3 border rounded-lg flex justify-between items-start';
                 
@@ -581,7 +497,7 @@
                         </button>
                     </div>
                 `;
-                logContainer.appendChild(entryEl);
+                container.appendChild(entryEl);
             });
         }
         
@@ -705,62 +621,89 @@
             });
         }
 
+        // UPDATED: Logic for dynamic stats filter and calculation
+        function setupStatsFilter() {
+            const start = new Date(2025, 9, 1); // Oct 1, 2025
+            const now = new Date();
+            const filter = document.getElementById('stats-filter');
+            
+            let html = '<option value="all">All Time</option>';
+            
+            let current = new Date(start);
+            let currentYear = -1;
+            
+            // Loop from start date until we pass the current date
+            while (current <= now || (current.getMonth() === now.getMonth() && current.getFullYear() === now.getFullYear())) {
+                const y = current.getFullYear();
+                const m = current.getMonth();
+                const mName = current.toLocaleString('default', { month: 'short' });
+                
+                if (y !== currentYear) {
+                    if (currentYear !== -1) html += '</optgroup>';
+                    html += `<optgroup label="${y}">`;
+                    currentYear = y;
+                }
+                
+                html += `<option value="${y}-${m}">${mName} ${y}</option>`;
+                
+                // Move to next month
+                current.setMonth(current.getMonth() + 1);
+            }
+            if (currentYear !== -1) html += '</optgroup>';
+            
+            filter.innerHTML = html;
+            filter.addEventListener('change', updateUI);
+        }
+
         function calculateAndRenderStats() {
             const filterValue = statsFilter.value;
             const today = new Date();
-            const challengeStart = new Date('2025-10-01T00:00:00');
+            const challengeStart = new Date(2025, 9, 1); // Oct 1, 2025
 
             ['user1', 'user2'].forEach(userKey => {
                 const userLogs = logData.filter(log => log.userId === userKey);
                 let totalSteps = 0;
                 let divisor = 1;
-                let multiplier = 365; // Default for 'all'
+                let multiplier = 365; 
                 let averageSteps = 0;
+
+                if (!userData[userKey]) return;
 
                 if (filterValue === 'all') {
                     totalSteps = userData[userKey].steps;
                     const diffTime = Math.max(0, today - challengeStart);
                     divisor = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                    multiplier = 365;
                 } else {
-                    const selectedMonth = parseInt(filterValue, 10);
-                    const year = selectedMonth >= 9 ? 2025 : 2026;
+                    const [yearStr, monthStr] = filterValue.split('-');
+                    const year = parseInt(yearStr);
+                    const month = parseInt(monthStr);
 
                     const filteredLogs = userLogs.filter(log => {
-                        const logDate = log.date.toDate();
-                        return logDate.getMonth() === selectedMonth && logDate.getFullYear() === year;
+                        const d = log.date.toDate();
+                        return d.getFullYear() === year && d.getMonth() === month;
                     });
                     totalSteps = filteredLogs.reduce((sum, log) => sum + log.steps, 0);
 
-                    const currentMonth = today.getMonth();
-                    const currentYear = today.getFullYear();
-                    
-                    // To calculate predicted total for a month:
-                    // 1. Calculate average per day SO FAR in that month.
-                    // 2. Multiply by TOTAL days in that month.
-
-                    let daysInMonth = new Date(year, selectedMonth + 1, 0).getDate();
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
                     multiplier = daysInMonth;
 
-                    if (selectedMonth === currentMonth && year === currentYear) {
-                        divisor = today.getDate(); // Divide by days passed so far
+                    if (year === today.getFullYear() && month === today.getMonth()) {
+                        divisor = today.getDate();
                     } else {
-                        // For a past month, divisor is total days (so avg is accurate for past)
-                        // and multiplier is also total days (so predicted = actual total)
-                        divisor = daysInMonth; 
+                        divisor = daysInMonth;
                     }
                 }
                 
-                divisor = Math.max(1, divisor); // Prevent division by zero
+                divisor = Math.max(1, divisor);
                 averageSteps = totalSteps / divisor;
-                
-                // Predicted steps = Average daily steps * Total days in period
                 const predictedSteps = averageSteps * multiplier;
 
-                const avgTarget = userKey === 'user1' ? user1AvgSteps : user2AvgSteps;
-                const predictedTarget = userKey === 'user1' ? user1PredictedSteps : user2PredictedSteps;
+                const avgTarget = document.getElementById(`${userKey}-avg-steps`);
+                const predTarget = document.getElementById(`${userKey}-predicted-steps`);
                 
-                avgTarget.textContent = Math.round(averageSteps).toLocaleString();
-                predictedTarget.textContent = Math.round(predictedSteps).toLocaleString();
+                if (avgTarget) avgTarget.textContent = Math.round(averageSteps).toLocaleString();
+                if (predTarget) predTarget.textContent = Math.round(predictedSteps).toLocaleString();
             });
         }
         
@@ -804,12 +747,12 @@
 
         function updateUI() {
             if (!userData.user1 || !userData.user2) return;
-            renderProgress('user1-progress', 'user1');
-            renderProgress('user2-progress', 'user2');
-            renderStretchGoals();
-            renderHighScores();
+            renderBars();
+            renderPassport();
             renderLogs();
             calculateAndRenderStats();
+            renderStretchGoals();
+            renderHighScores();
             renderMap();
             setTimeout(() => document.querySelectorAll('.milestone').forEach(m => m.classList.add('visible')), 100);
         }
@@ -903,21 +846,6 @@
             }
         }
         
-        function setupStatsFilter() {
-            const challengeMonths = [
-                { name: 'Oct', value: 9 }, { name: 'Nov', value: 10 }, { name: 'Dec', value: 11 },
-                { name: 'Jan', value: 0 }, { name: 'Feb', value: 1 }, { name: 'Mar', value: 2 },
-                { name: 'Apr', value: 3 }, { name: 'May', value: 4 }, { name: 'Jun', value: 5 },
-                { name: 'Jul', value: 6 }, { name: 'Aug', value: 7 }, { name: 'Sep', value: 8 }
-            ];
-
-            let options = '<option value="all">All</option>';
-            options += challengeMonths.map(m => `<option value="${m.value}">${m.name}</option>`).join('');
-            statsFilter.innerHTML = options;
-
-            statsFilter.addEventListener('change', updateUI);
-        }
-
         // --- Modal Handlers ---
         let confirmCallback = null;
         function showConfirmModal(message, onConfirm) {
@@ -1078,7 +1006,7 @@
 
         // Initialisation
         function initializeMap() {
-            map = L.map('map').setView([54.5, -2.5], 6); // Centered on the UK
+            map = L.map('map').setView([54.5, -2.5], 6); 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
