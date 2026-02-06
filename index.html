@@ -711,9 +711,17 @@
                 }
             });
 
-            // Auto-fit map to show all pins
-            if (markers.getLayers().length > 0) {
-                map.fitBounds(markers.getBounds(), { padding: [30, 30], maxZoom: 12 });
+            // Auto-fit map to show all pins (on first load and when new pins are added)
+            const currentPinCount = markers.getLayers().length;
+            if (currentPinCount > 0) {
+                map.invalidateSize();
+                if (!map._lastPinCount || map._lastPinCount !== currentPinCount) {
+                    map._lastPinCount = currentPinCount;
+                    setTimeout(() => {
+                        map.invalidateSize();
+                        map.fitBounds(markers.getBounds(), { padding: [30, 30], maxZoom: 12 });
+                    }, 300);
+                }
             }
         }
 
