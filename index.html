@@ -746,7 +746,7 @@
                     const overlap = pinPositions.find(p => Math.abs(p.lat - lat) < 0.001 && Math.abs(p.lng - lng) < 0.001);
                     if (overlap) {
                         // Nudge Ant left, Amy right
-                        lng += isAnt ? -0.00008 : 0.00008;
+                        lng += isAnt ? -0.00011 : 0.00011;
                     }
                     pinPositions.push({ lat: log.lat, lng: log.lng });
 
