@@ -162,7 +162,6 @@
                     <button type="submit" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Add</button>
                 </div>
             </form>
-            <p id="feedback-message" class="text-center text-green-600 text-sm mt-2 h-4"></p>
         </div>
 
         <!-- Horizontal Progress Bars -->
@@ -272,7 +271,7 @@
         const USER_2_NAME = "Amy";
         
         const MASTER_MILESTONES = [
-            { steps: 8073, label: "Amy's Parents 🏡", description: "Ants' to my parents' house! ❤️" }, 
+            { steps: 8073, label: "Amy's Parents 🏡", description: "Ant's to my parents' house! ❤️" },
             { steps: 37063, label: "Long Trek 🚶‍♂️", description: "Amy's long walk to her parents! 🚶‍♀️" }, 
             { steps: 54854, label: "Marathon 🏃‍♀️", description: "That's a marathon! 🏃‍♂️" },
             { steps: 130000, label: "Birmingham 🏙️", description: "Hello Birmingham! 🏙️" }, 
@@ -334,7 +333,6 @@
         const userSelector = document.getElementById('user-selector');
         const stepForm = document.getElementById('step-form');
         const stepInput = document.getElementById('step-input');
-        const feedbackMessage = document.getElementById('feedback-message');
         const statsFilter = document.getElementById('stats-filter');
         const passportContainer = document.getElementById('passport-container');
         const user1LogContainer = document.getElementById('user1-log');
@@ -518,7 +516,7 @@
                                 <div class="text-center">
                                     <div class="text-sm font-bold ${amy?'text-purple-600':'text-gray-300'}">Amy</div>
                                     <div class="text-xs ${amy?'text-gray-600':'text-gray-300'}">${amy ? fmtDate(amyDate) : 'Not yet'}</div>
-                                    ${amyDate && (!antDate || amyDate < antDate) ? '<div class="text-[10px] text-purple-600 font-bold mt-1">👑 First</div>' : ''}
+                                    ${amyDate && (!antDate || amyDate <= antDate) ? '<div class="text-[10px] text-purple-600 font-bold mt-1">👑 First</div>' : ''}
                                 </div>
                             </div>
                         </div>`, () => {}, 'Close');
@@ -732,23 +730,41 @@
             if (!map || !markers) return;
             markers.clearLayers();
 
-            // Collect all pin positions to detect overlaps
-            const pinPositions = [];
+            // Count how many logs share each ~100m location bucket, so we can
+            // scatter duplicates instead of stacking them on top of each other.
+            const locationCounts = {};
+            logData.forEach(log => {
+                if (log.lat && log.lng) {
+                    const key = `${log.lat.toFixed(3)},${log.lng.toFixed(3)}`;
+                    locationCounts[key] = (locationCounts[key] || 0) + 1;
+                }
+            });
+
+            // Deterministic offset from the log id, so the same log always lands
+            // on the same spot — pins don't jump around on re-renders.
+            const offsetForId = (id, radius) => {
+                let h = 0;
+                for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+                const angle = ((h & 0xffff) / 0x10000) * Math.PI * 2;
+                const dist = (((h >>> 16) & 0xffff) / 0x10000) * radius;
+                return { dLat: Math.sin(angle) * dist, dLng: Math.cos(angle) * dist };
+            };
 
             logData.forEach(log => {
                 if(log.lat && log.lng) {
                     const isAnt = log.userId === 'user1';
                     const iconClass = isAnt ? 'marker-icon-ant' : 'marker-icon-amy';
-                    
-                    // Check if another pin is very close (same location)
+
+                    // If multiple logs share this spot (e.g. the local park),
+                    // scatter them inside a ~55m circle so they're clickable when zoomed in.
                     let lat = log.lat;
                     let lng = log.lng;
-                    const overlap = pinPositions.find(p => Math.abs(p.lat - lat) < 0.001 && Math.abs(p.lng - lng) < 0.001);
-                    if (overlap) {
-                        // Nudge Ant left, Amy right
-                        lng += isAnt ? -0.00011 : 0.00011;
+                    const key = `${log.lat.toFixed(3)},${log.lng.toFixed(3)}`;
+                    if (locationCounts[key] > 1) {
+                        const { dLat, dLng } = offsetForId(log.id, 0.0005);
+                        lat += dLat;
+                        lng += dLng;
                     }
-                    pinPositions.push({ lat: log.lat, lng: log.lng });
 
                     const icon = L.icon({
                         iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -1027,7 +1043,6 @@
             renderStretch();
             renderHighScores();
             renderMap();
-            setTimeout(() => document.querySelectorAll('.milestone').forEach(m => m.classList.add('visible')), 100);
         }
 
         // --- Setup ---
