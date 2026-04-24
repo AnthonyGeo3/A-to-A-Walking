@@ -134,6 +134,35 @@
             border-radius: 12px;
             padding: 12px;
         }
+
+        /* Photo thumbnails in log entries */
+        .log-photo-thumb {
+            width: 44px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 6px;
+            flex-shrink: 0;
+            cursor: pointer;
+            background-color: #f3f4f6;
+        }
+        .popup-photo {
+            width: 100%;
+            max-width: 200px;
+            height: auto;
+            border-radius: 6px;
+            margin-top: 6px;
+            cursor: pointer;
+        }
+        /* Simple spinner */
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #374151;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="text-gray-800 flex items-center justify-center min-h-screen p-2 sm:p-4">
@@ -261,10 +290,31 @@
         </div>
     </div>
 
+    <!-- Lightbox for viewing full-size photos -->
+    <div id="lightbox-overlay" class="hidden fixed inset-0 bg-black bg-opacity-90 z-50 flex flex-col items-center justify-center p-4">
+        <img id="lightbox-img" alt="Log photo" class="max-w-full max-h-[80vh] rounded shadow-xl" />
+        <div class="mt-4 flex gap-3">
+            <button id="lightbox-remove" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm">Remove Photo</button>
+            <button id="lightbox-close" class="bg-white hover:bg-gray-100 px-4 py-2 rounded text-sm">Close</button>
+        </div>
+    </div>
+
+    <!-- Loading overlay (compression/upload progress) -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-40 z-[60] flex items-center justify-center">
+        <div class="bg-white rounded-xl p-6 text-center shadow-xl">
+            <div class="spinner mx-auto mb-3"></div>
+            <p id="loading-text" class="text-sm font-medium text-gray-700">Working...</p>
+        </div>
+    </div>
+
+    <!-- Hidden file input for photo uploads (triggered by camera buttons) -->
+    <input type="file" id="photo-file-input" accept="image/*" class="hidden" />
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- ⚙️ CHALLENGE DATA ---
         const USER_1_NAME = "Ant";
@@ -316,6 +366,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
+        const storage = getStorage(app);
 
         // Firestore References
         const publicDataCollection = collection(db, 'artifacts', appId, 'public', 'data', 'challengeData');
@@ -378,6 +429,69 @@
             }
         });
         updateDateDisplay();
+
+        // --- Photo Helpers ---
+
+        function showLoading(message) {
+            document.getElementById('loading-text').textContent = message || 'Working...';
+            document.getElementById('loading-overlay').classList.remove('hidden');
+        }
+        function hideLoading() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+        }
+
+        // Resize an image file to a max width (preserving aspect ratio) and
+        // re-encode as a moderate-quality JPEG. Typical output: 50-200 KB.
+        async function compressImage(file, maxWidth = 800, quality = 0.75) {
+            const img = new Image();
+            const objUrl = URL.createObjectURL(file);
+            try {
+                img.src = objUrl;
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = () => reject(new Error('Could not read that image file'));
+                });
+                const scale = Math.min(1, maxWidth / img.width);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(img.width * scale));
+                canvas.height = Math.max(1, Math.round(img.height * scale));
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                return await new Promise((resolve, reject) => {
+                    canvas.toBlob(
+                        blob => blob ? resolve(blob) : reject(new Error('Compression failed')),
+                        'image/jpeg',
+                        quality
+                    );
+                });
+            } finally {
+                URL.revokeObjectURL(objUrl);
+            }
+        }
+
+        async function uploadPhotoForLog(logId, file) {
+            showLoading('Compressing photo...');
+            const compressed = await compressImage(file);
+            showLoading('Uploading...');
+            const path = `photos/${logId}.jpg`;
+            const sref = storageRef(storage, path);
+            await uploadBytes(sref, compressed, { contentType: 'image/jpeg' });
+            const url = await getDownloadURL(sref);
+            showLoading('Saving...');
+            await updateDoc(doc(logsCollectionRef, logId), { photoUrl: url, photoPath: path });
+        }
+
+        async function removePhotoForLog(logId, photoPath) {
+            if (photoPath) {
+                try {
+                    await deleteObject(storageRef(storage, photoPath));
+                } catch (e) {
+                    // Swallow "already gone" — still want to clear the Firestore fields.
+                    if (e.code !== 'storage/object-not-found') throw e;
+                }
+            }
+            await updateDoc(doc(logsCollectionRef, logId), { photoUrl: null, photoPath: null });
+        }
 
         // --- Logic ---
 
@@ -557,23 +671,33 @@
                 const uLogs = logs.filter(l => l.userId === uid);
                 uLogs.forEach(l => {
                     const div = document.createElement('div');
-                    div.className = 'log-entry p-2 border rounded text-xs bg-white flex justify-between';
+                    div.className = 'log-entry p-2 border rounded text-xs bg-white flex justify-between items-start gap-2';
                     const date = l.date.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short'});
+                    const photoPathAttr = l.photoPath ? ` data-photo-path="${l.photoPath}"` : '';
+                    const thumb = l.photoUrl
+                        ? `<img src="${l.photoUrl}" class="log-photo-thumb" data-id="${l.id}" data-url="${l.photoUrl}" alt="Log photo" />`
+                        : '';
                     div.innerHTML = `
-                        <div>
-                            <span class="font-bold ${uid==='user1'?'text-green-600':'text-purple-600'}">${l.steps.toLocaleString()}</span>
-                            <span class="text-gray-400 ml-1 cursor-pointer hover:underline edit-date" data-id="${l.id}" data-date="${l.date.toDate().toISOString().split('T')[0]}">${date}</span>
-                            ${l.note ? `<div class="text-gray-600 italic">"${l.note}"</div>` : ''}
-                            ${l.locationName ? `<div class="text-gray-500 truncate max-w-[140px] sm:max-w-[180px]">📍 ${l.locationName}</div>` : ''}
+                        <div class="flex gap-2 flex-1 min-w-0 items-start">
+                            ${thumb}
+                            <div class="min-w-0 flex-1">
+                                <span class="font-bold ${uid==='user1'?'text-green-600':'text-purple-600'}">${l.steps.toLocaleString()}</span>
+                                <span class="text-gray-400 ml-1 cursor-pointer hover:underline edit-date" data-id="${l.id}" data-date="${l.date.toDate().toISOString().split('T')[0]}">${date}</span>
+                                ${l.note ? `<div class="text-gray-600 italic">"${l.note}"</div>` : ''}
+                                ${l.locationName ? `<div class="text-gray-500 truncate max-w-[140px] sm:max-w-[180px]">📍 ${l.locationName}</div>` : ''}
+                            </div>
                         </div>
-                        <div class="flex gap-1 items-center">
+                        <div class="flex gap-1 items-center flex-shrink-0">
+                            <button class="text-amber-400 hover:text-amber-600 edit-photo" data-id="${l.id}" title="${l.photoUrl ? 'Change photo' : 'Add photo'}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            </button>
                             <button class="text-gray-400 hover:text-gray-600 edit-loc" data-id="${l.id}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                             </button>
                             <button class="text-blue-400 hover:text-blue-600 edit-note" data-id="${l.id}" data-note="${l.note||''}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             </button>
-                            <button class="text-red-400 hover:text-red-600 del-log" data-id="${l.id}" data-steps="${l.steps}" data-uid="${uid}">
+                            <button class="text-red-400 hover:text-red-600 del-log" data-id="${l.id}" data-steps="${l.steps}" data-uid="${uid}"${photoPathAttr}>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
                         </div>
@@ -792,9 +916,10 @@
                                 <span class="text-gray-400 mx-1">•</span>
                                 <span class="text-gray-500 font-normal">${log.date.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short'})}</span>
                             </div>
-                            
+
                             ${log.note ? `<div class="italic text-gray-700 mb-1">"${log.note}"</div>` : ''}
                             ${shortLocation ? `<div class="text-gray-500 text-xs flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg> ${shortLocation}</div>` : ''}
+                            ${log.photoUrl ? `<img src="${log.photoUrl}" class="popup-photo" data-id="${log.id}" data-url="${log.photoUrl}" alt="Log photo" />` : ''}
                         </div>`;
                     
                     marker.bindPopup(popupContent, { maxWidth: 220 });
@@ -884,7 +1009,26 @@
             cancelBtn.onclick = () => modal.classList.add('hidden');
         };
 
+        // Stash the log id when the camera button is clicked, so the file-input
+        // change handler knows which log to attach the photo to.
+        let pendingPhotoLogId = null;
+
         document.addEventListener('click', async e => {
+            // Clicking a thumbnail (log list) or popup photo (map) opens the lightbox.
+            const photoEl = e.target.closest('.log-photo-thumb, .popup-photo');
+            if (photoEl) {
+                const lb = document.getElementById('lightbox-overlay');
+                const img = document.getElementById('lightbox-img');
+                const removeBtn = document.getElementById('lightbox-remove');
+                img.src = photoEl.dataset.url;
+                removeBtn.dataset.id = photoEl.dataset.id;
+                // Look up the log so we can pass the storage path to the remove handler.
+                const log = logData.find(l => l.id === photoEl.dataset.id);
+                removeBtn.dataset.photoPath = log && log.photoPath ? log.photoPath : '';
+                lb.classList.remove('hidden');
+                return;
+            }
+
             const btn = e.target.closest('button');
             const span = e.target.closest('span.edit-date');
             if(span) {
@@ -894,7 +1038,7 @@
                 });
             }
             if(!btn) return;
-            
+
             if(btn.classList.contains('edit-note')) {
                 showModal('Edit Note', `<textarea id="m-note" class="w-full border p-2 rounded" maxlength="150">${btn.dataset.note}</textarea>`, async () => {
                     await updateDoc(doc(logsCollectionRef, btn.dataset.id), { note: document.getElementById('m-note').value });
@@ -909,9 +1053,44 @@
                     if(data.length) await updateDoc(doc(logsCollectionRef, btn.dataset.id), { locationName: data[0].display_name.split(',')[0], lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
                 });
             }
+            if(btn.classList.contains('edit-photo')) {
+                // Trigger the hidden file input; the change handler does the upload.
+                pendingPhotoLogId = btn.dataset.id;
+                const fi = document.getElementById('photo-file-input');
+                fi.value = ''; // so selecting the same file twice still fires 'change'
+                fi.click();
+            }
+            if(btn.id === 'lightbox-close') {
+                document.getElementById('lightbox-overlay').classList.add('hidden');
+            }
+            if(btn.id === 'lightbox-remove') {
+                const { id, photoPath } = btn.dataset;
+                if (!id) return;
+                if (!confirm('Remove this photo?')) return;
+                document.getElementById('lightbox-overlay').classList.add('hidden');
+                showLoading('Removing...');
+                try {
+                    await removePhotoForLog(id, photoPath || null);
+                } catch (err) {
+                    alert('Could not remove photo: ' + (err.message || err));
+                } finally {
+                    hideLoading();
+                }
+            }
             if(btn.classList.contains('del-log')) {
                 showModal('Delete Entry?', '<p class="text-red-600">This cannot be undone.</p>', async () => {
-                    const { id, steps, uid } = btn.dataset;
+                    const { id, steps, uid, photoPath } = btn.dataset;
+                    // If the log has a photo, try to remove the Storage object first
+                    // so deleted entries don't leave orphaned files sitting in the bucket.
+                    if (photoPath) {
+                        try {
+                            await deleteObject(storageRef(storage, photoPath));
+                        } catch (err) {
+                            if (err.code !== 'storage/object-not-found') {
+                                console.warn('Could not delete photo from Storage:', err);
+                            }
+                        }
+                    }
                     await runTransaction(db, async t => {
                         const ref = uid==='user1'?user1DocRef:user2DocRef;
                         const u = await t.get(ref);
@@ -919,6 +1098,21 @@
                         t.delete(doc(logsCollectionRef, id));
                     });
                 });
+            }
+        });
+
+        // File input for the camera button — fires after the user picks a photo.
+        document.getElementById('photo-file-input').addEventListener('change', async e => {
+            const file = e.target.files && e.target.files[0];
+            const logId = pendingPhotoLogId;
+            pendingPhotoLogId = null;
+            if (!file || !logId) return;
+            try {
+                await uploadPhotoForLog(logId, file);
+            } catch (err) {
+                alert('Could not save photo: ' + (err.message || err));
+            } finally {
+                hideLoading();
             }
         });
 
