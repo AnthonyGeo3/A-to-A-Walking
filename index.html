@@ -41,6 +41,24 @@
             border-radius: 99px;
             box-shadow: 0 2px 8px rgba(168, 85, 247, 0.3);
         }
+        .rivalry-track {
+            background-color: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            height: 22px;
+            border-radius: 99px;
+            overflow: hidden;
+            display: flex;
+        }
+        .rivalry-fill-ant {
+            background: linear-gradient(to right, #4ade80, #34d399);
+            transition: width 0.8s ease;
+            height: 100%;
+        }
+        .rivalry-fill-amy {
+            background: linear-gradient(to right, #a855f7, #9333ea);
+            transition: width 0.8s ease;
+            height: 100%;
+        }
         .peer-marker {
             position: absolute;
             top: 50%;
@@ -260,6 +278,7 @@
             </div>
             <div id="heatmap-container" class="mt-4"></div>
             <p id="heatmap-tap-info" class="text-center text-xs text-gray-400 mt-1 h-4"></p>
+            <div id="rivalry-container" class="mt-4"></div>
         </div>
 
         <!-- Passport -->
@@ -923,12 +942,73 @@
                 const steps = parseInt(cell.dataset.steps);
                 const day = cell.dataset.day;
                 const name = cell.dataset.name;
-                tapInfo.textContent = steps > 0 
+                tapInfo.textContent = steps > 0
                     ? `${name} · ${day} ${monthName} · ${steps.toLocaleString()} steps`
                     : `${name} · ${day} ${monthName} · No steps`;
             });
         }
-        
+
+        function renderRivalry() {
+            const container = document.getElementById('rivalry-container');
+            if (!container) return;
+
+            const today = new Date();
+            // Monday-as-start-of-week: getDay() returns 0=Sun..6=Sat → remap to Mon=0..Sun=6
+            const dayOfWeek = (today.getDay() + 6) % 7;
+            const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOfWeek);
+            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+            let weekAnt = 0, weekAmy = 0, monthAnt = 0, monthAmy = 0;
+            logData.forEach(log => {
+                const d = log.date.toDate();
+                if (d > today) return;
+                if (d >= monthStart) {
+                    if (log.userId === 'user1') monthAnt += log.steps;
+                    else if (log.userId === 'user2') monthAmy += log.steps;
+                }
+                if (d >= weekStart) {
+                    if (log.userId === 'user1') weekAnt += log.steps;
+                    else if (log.userId === 'user2') weekAmy += log.steps;
+                }
+            });
+
+            const monthName = today.toLocaleString('default', { month: 'long' });
+            container.innerHTML = `
+                <h3 class="text-sm font-bold text-gray-700 text-center mb-3 mt-4">⚔️ Head to Head</h3>
+                ${rivalryBarHtml('This week (Mon–Sun)', weekAnt, weekAmy)}
+                ${rivalryBarHtml(`This month (${monthName})`, monthAnt, monthAmy)}
+            `;
+        }
+
+        function rivalryBarHtml(label, antSteps, amySteps) {
+            const total = antSteps + amySteps;
+            const antPct = total > 0 ? (antSteps / total) * 100 : 0;
+            const amyPct = total > 0 ? (amySteps / total) * 100 : 0;
+            // Use rounded values for display so they sum to 100 exactly
+            const antPctDisp = total > 0 ? Math.round(antPct) : 0;
+            const amyPctDisp = total > 0 ? 100 - antPctDisp : 0;
+
+            let antCrown = '', amyCrown = '';
+            if (total > 0) {
+                if (antSteps > amySteps) antCrown = ' 👑';
+                else if (amySteps > antSteps) amyCrown = '👑 ';
+            }
+
+            return `
+                <div class="mb-3 last:mb-0">
+                    <p class="text-xs font-semibold text-gray-500 text-center mb-1">${label}</p>
+                    <div class="rivalry-track">
+                        <div class="rivalry-fill-ant" style="width: ${antPct}%"></div>
+                        <div class="rivalry-fill-amy" style="width: ${amyPct}%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs mt-1.5">
+                        <span class="text-green-700 font-semibold">Ant · ${antSteps.toLocaleString()} (${antPctDisp}%)${antCrown}</span>
+                        <span class="text-purple-700 font-semibold">${amyCrown}Amy · ${amySteps.toLocaleString()} (${amyPctDisp}%)</span>
+                    </div>
+                </div>
+            `;
+        }
+
         function renderMap() {
             if (!map || !markers) return;
             markers.clearLayers();
@@ -1332,6 +1412,7 @@
             renderLogs();
             calculateAndRenderStats();
             renderHeatmap();
+            renderRivalry();
             renderStretch();
             renderHighScores();
             renderMap();
