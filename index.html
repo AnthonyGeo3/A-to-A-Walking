@@ -1469,6 +1469,11 @@
             const collapseIcon = document.getElementById('map-fs-collapse');
             let isMapFs = false;
 
+            // Track exactly which inline props we set, so we can clear only ours
+            // on collapse and leave any Leaflet-applied inline styles alone.
+            const FS_MAP_PROPS  = ['width', 'height', 'borderRadius', 'boxShadow'];
+            const FS_BTN_PROPS  = ['width', 'height', 'zIndex', 'background', 'border'];
+
             const setMapFullscreen = (on) => {
                 isMapFs = on;
                 if (on) {
@@ -1497,21 +1502,27 @@
                     });
                     document.body.style.overflow = 'hidden';
                 } else {
+                    // Clear ONLY the inline props we set — preserves Leaflet's own
+                    // inline `position: relative` on the map container.
+                    FS_MAP_PROPS.forEach(p => { mapEl.style[p] = ''; });
+                    FS_BTN_PROPS.forEach(p => { fsBtn.style[p] = ''; });
                     // Move map and button back into the wrapper
                     wrapper.appendChild(mapEl);
                     wrapper.appendChild(fsBtn);
                     const overlay = document.getElementById('map-fs-overlay');
                     if (overlay) overlay.remove();
-                    mapEl.removeAttribute('style');
-                    fsBtn.removeAttribute('style');
                     document.body.style.overflow = '';
+                    // Force a reflow so Leaflet sees the new container size
+                    void mapEl.offsetHeight;
                 }
                 expandIcon.classList.toggle('hidden', on);
                 collapseIcon.classList.toggle('hidden', !on);
                 fsBtn.setAttribute('aria-label', on ? 'Exit fullscreen' : 'Expand map');
-                // Tell Leaflet the container size changed — call twice for safety
-                setTimeout(() => map.invalidateSize(), 50);
-                setTimeout(() => map.invalidateSize(), 300);
+                // Tell Leaflet the container size changed — multiple calls cover
+                // the case where the first fires before layout has settled.
+                requestAnimationFrame(() => map.invalidateSize());
+                setTimeout(() => map.invalidateSize(), 100);
+                setTimeout(() => map.invalidateSize(), 400);
             };
 
             fsBtn.addEventListener('click', (e) => {
