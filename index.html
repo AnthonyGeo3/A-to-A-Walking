@@ -59,6 +59,21 @@
             transition: width 0.8s ease;
             height: 100%;
         }
+        #map-wrapper.fullscreen {
+            position: fixed;
+            inset: 0;
+            z-index: 9998;
+            background: #fff;
+        }
+        #map-wrapper.fullscreen #map {
+            height: 100vh !important;
+            height: 100dvh !important; /* iOS-friendly dynamic viewport */
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+        body.map-fs-lock {
+            overflow: hidden;
+        }
         .peer-marker {
             position: absolute;
             top: 50%;
@@ -331,7 +346,25 @@
                     <div id="user2-log" class="max-h-64 overflow-y-auto space-y-2"></div>
                 </div>
             </div>
-            <div id="map" class="h-80 rounded-lg shadow-md"></div>
+            <div id="map-wrapper" class="relative">
+                <button id="map-fullscreen-btn" type="button"
+                        class="absolute top-2 right-2 z-[1001] bg-white shadow-md rounded-md w-9 h-9 flex items-center justify-center text-gray-700 hover:bg-gray-50 active:scale-95 transition"
+                        aria-label="Expand map">
+                    <svg id="map-fs-expand" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 3 21 3 21 9"/>
+                        <polyline points="9 21 3 21 3 15"/>
+                        <line x1="21" y1="3" x2="14" y2="10"/>
+                        <line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                    <svg id="map-fs-collapse" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 14 10 14 10 20"/>
+                        <polyline points="20 10 14 10 14 4"/>
+                        <line x1="14" y1="10" x2="21" y2="3"/>
+                        <line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                </button>
+                <div id="map" class="h-80 rounded-lg shadow-md"></div>
+            </div>
         </div>
         </div><!-- close padding wrapper -->
     </div>
@@ -1420,11 +1453,37 @@
 
         // --- Setup ---
         function initializeMap() {
-            map = L.map('map').setView([53.05, -3.0], 9); 
+            map = L.map('map').setView([53.05, -3.0], 9);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
             markers = L.layerGroup().addTo(map);
+
+            // Fullscreen toggle for the map
+            const fsBtn = document.getElementById('map-fullscreen-btn');
+            const wrapper = document.getElementById('map-wrapper');
+            const expandIcon = document.getElementById('map-fs-expand');
+            const collapseIcon = document.getElementById('map-fs-collapse');
+
+            const setMapFullscreen = (on) => {
+                wrapper.classList.toggle('fullscreen', on);
+                document.body.classList.toggle('map-fs-lock', on);
+                expandIcon.classList.toggle('hidden', on);
+                collapseIcon.classList.toggle('hidden', !on);
+                fsBtn.setAttribute('aria-label', on ? 'Exit fullscreen' : 'Expand map');
+                // Let layout settle, then tell Leaflet the container size changed
+                setTimeout(() => map.invalidateSize(), 60);
+            };
+
+            fsBtn.addEventListener('click', () => {
+                setMapFullscreen(!wrapper.classList.contains('fullscreen'));
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && wrapper.classList.contains('fullscreen')) {
+                    setMapFullscreen(false);
+                }
+            });
         }
 
         async function main() {
