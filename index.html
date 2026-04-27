@@ -1459,7 +1459,9 @@
             }).addTo(map);
             markers = L.layerGroup().addTo(map);
 
-            // Fullscreen toggle for the map — uses inline styles (bypasses CSS cascade fights)
+            // Fullscreen toggle — moves the map and button to a body-level overlay
+            // when expanded, so it's not trapped inside .main-container's
+            // backdrop-filter (which would break position: fixed otherwise).
             const fsBtn = document.getElementById('map-fullscreen-btn');
             const wrapper = document.getElementById('map-wrapper');
             const mapEl = document.getElementById('map');
@@ -1470,24 +1472,36 @@
             const setMapFullscreen = (on) => {
                 isMapFs = on;
                 if (on) {
-                    Object.assign(wrapper.style, {
-                        position: 'fixed', top: '0', left: '0',
-                        width: '100vw', height: '100vh',
-                        zIndex: '99999', background: '#fff'
-                    });
+                    let overlay = document.getElementById('map-fs-overlay');
+                    if (!overlay) {
+                        overlay = document.createElement('div');
+                        overlay.id = 'map-fs-overlay';
+                        Object.assign(overlay.style, {
+                            position: 'fixed', top: '0', left: '0',
+                            width: '100vw', height: '100vh',
+                            zIndex: '99999', background: '#fff'
+                        });
+                        document.body.appendChild(overlay);
+                    }
+                    overlay.appendChild(mapEl);
+                    overlay.appendChild(fsBtn);
                     Object.assign(mapEl.style, {
                         width: '100%', height: '100%',
                         borderRadius: '0', boxShadow: 'none'
                     });
                     Object.assign(fsBtn.style, {
-                        zIndex: '100000', width: '44px', height: '44px',
-                        background: 'rgba(255,255,255,0.95)',
-                        border: '1px solid rgba(0,0,0,0.1)'
+                        width: '44px', height: '44px',
+                        zIndex: '100000',
+                        background: 'rgba(255,255,255,0.97)',
+                        border: '1px solid rgba(0,0,0,0.12)'
                     });
                     document.body.style.overflow = 'hidden';
                 } else {
-                    // Wipe inline styles so original classes take over again
-                    wrapper.removeAttribute('style');
+                    // Move map and button back into the wrapper
+                    wrapper.appendChild(mapEl);
+                    wrapper.appendChild(fsBtn);
+                    const overlay = document.getElementById('map-fs-overlay');
+                    if (overlay) overlay.remove();
                     mapEl.removeAttribute('style');
                     fsBtn.removeAttribute('style');
                     document.body.style.overflow = '';
@@ -1495,10 +1509,9 @@
                 expandIcon.classList.toggle('hidden', on);
                 collapseIcon.classList.toggle('hidden', !on);
                 fsBtn.setAttribute('aria-label', on ? 'Exit fullscreen' : 'Expand map');
-                // Tell Leaflet the container size changed — call twice in case the
-                // first fires before layout has settled.
+                // Tell Leaflet the container size changed — call twice for safety
                 setTimeout(() => map.invalidateSize(), 50);
-                setTimeout(() => map.invalidateSize(), 250);
+                setTimeout(() => map.invalidateSize(), 300);
             };
 
             fsBtn.addEventListener('click', (e) => {
