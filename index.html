@@ -1459,30 +1459,55 @@
             }).addTo(map);
             markers = L.layerGroup().addTo(map);
 
-            // Fullscreen toggle for the map
+            // Fullscreen toggle for the map — uses inline styles (bypasses CSS cascade fights)
             const fsBtn = document.getElementById('map-fullscreen-btn');
             const wrapper = document.getElementById('map-wrapper');
+            const mapEl = document.getElementById('map');
             const expandIcon = document.getElementById('map-fs-expand');
             const collapseIcon = document.getElementById('map-fs-collapse');
+            let isMapFs = false;
 
             const setMapFullscreen = (on) => {
-                wrapper.classList.toggle('fullscreen', on);
-                document.body.classList.toggle('map-fs-lock', on);
+                isMapFs = on;
+                if (on) {
+                    Object.assign(wrapper.style, {
+                        position: 'fixed', top: '0', left: '0',
+                        width: '100vw', height: '100vh',
+                        zIndex: '99999', background: '#fff'
+                    });
+                    Object.assign(mapEl.style, {
+                        width: '100%', height: '100%',
+                        borderRadius: '0', boxShadow: 'none'
+                    });
+                    Object.assign(fsBtn.style, {
+                        zIndex: '100000', width: '44px', height: '44px',
+                        background: 'rgba(255,255,255,0.95)',
+                        border: '1px solid rgba(0,0,0,0.1)'
+                    });
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    // Wipe inline styles so original classes take over again
+                    wrapper.removeAttribute('style');
+                    mapEl.removeAttribute('style');
+                    fsBtn.removeAttribute('style');
+                    document.body.style.overflow = '';
+                }
                 expandIcon.classList.toggle('hidden', on);
                 collapseIcon.classList.toggle('hidden', !on);
                 fsBtn.setAttribute('aria-label', on ? 'Exit fullscreen' : 'Expand map');
-                // Let layout settle, then tell Leaflet the container size changed
-                setTimeout(() => map.invalidateSize(), 60);
+                // Tell Leaflet the container size changed — call twice in case the
+                // first fires before layout has settled.
+                setTimeout(() => map.invalidateSize(), 50);
+                setTimeout(() => map.invalidateSize(), 250);
             };
 
-            fsBtn.addEventListener('click', () => {
-                setMapFullscreen(!wrapper.classList.contains('fullscreen'));
+            fsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setMapFullscreen(!isMapFs);
             });
 
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && wrapper.classList.contains('fullscreen')) {
-                    setMapFullscreen(false);
-                }
+                if (e.key === 'Escape' && isMapFs) setMapFullscreen(false);
             });
         }
 
