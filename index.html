@@ -861,6 +861,17 @@
             });
         }
 
+        // All-time daily average for a user. Uses the same "don't count today until it's
+        // logged" rule as the stats panel. Returns 0 if there's nothing to go on yet.
+        function getDailyAverage(userKey) {
+            if (!userData[userKey]) return 0;
+            const challengeStart = new Date(2025, 9, 1);
+            let days = Math.floor(Math.max(0, new Date() - challengeStart) / 86400000) + 1;
+            if (!hasLoggedToday(userKey)) days -= 1;
+            days = Math.max(1, days);
+            return userData[userKey].steps / days;
+        }
+
         function calculateAndRenderStats() {
             const filterValue = statsFilter.value;
             const today = new Date();
@@ -1158,6 +1169,19 @@
             });
         }
 
+        // "X days to go" at the current daily average, plus the date that lands on.
+        function daysToGoalText(uid, g) {
+            const avg = getDailyAverage(uid);
+            const remaining = Math.max(0, g.steps - userData[uid].steps);
+            if (avg <= 0) return 'Log some steps to see an ETA';
+            const days = Math.ceil(remaining / avg);
+            if (days > 3650) return 'Over 10 years at this pace 😅';
+            const eta = new Date();
+            eta.setDate(eta.getDate() + days);
+            const etaStr = eta.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            return `${days.toLocaleString()} day${days === 1 ? '' : 's'} to go &middot; ~${etaStr}`;
+        }
+
         function renderStretch() {
             const div = document.getElementById('stretch-goals-container');
             div.innerHTML = '';
@@ -1181,7 +1205,7 @@
                 div.innerHTML += `<div class="bg-white p-3 rounded border-l-4 ${done?'border-amber-400 bg-amber-50':'border-gray-200'} shadow-sm">
                     <div class="flex justify-between items-start">
                         <div><div class="font-bold text-sm">${g.label} (${userData[uid].name})</div><div class="text-xs text-gray-500">${g.steps.toLocaleString()}</div>
-                        ${!done ? `<div class="text-[10px] mt-1 text-${uid==='user1'?'green':'purple'}-600">Daily: ${Math.ceil(rem/daysLeft)}</div>` : `<div class="text-[10px] mt-1 text-amber-600 font-bold">Smashed it! 🎉</div>`}
+                        ${!done ? `<div class="text-[10px] mt-1 text-${uid==='user1'?'green':'purple'}-600">${daysToGoalText(uid, g)}</div>` : `<div class="text-[10px] mt-1 text-amber-600 font-bold">Smashed it! 🎉</div>`}
                         </div>
                         <div class="flex items-center gap-2">
                             <div class="text-xl">${g.reward}</div>
