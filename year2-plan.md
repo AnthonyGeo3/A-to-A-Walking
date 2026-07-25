@@ -41,7 +41,7 @@
 
 ## 6. Memories — "A year ago today"
 
-- **Candidates:** logs from either person dated exactly one year ago (±2 day fallback window, nearest day wins) that have a note, photo, or location. No qualifying log → section doesn't render at all.
+- **Candidates:** logs from either person dated *exactly* one year ago today that have a note, photo, or location. No fuzzy window. No qualifying log → section doesn't render at all.
 - **Smart content fallback per log:** note first → else location → else steps; camera icon shown if a photo exists.
 - **Fair picking:** if both people have a memory that day, the strip shows one chosen by a deterministic random seed on the date (so it doesn't flip between renders, and doesn't always favour Ant). The tap-through modal shows **both** memories regardless.
 - **Strip:** one thin sepia/amber line under Log Steps — truncated text + chevron. Must not compete with the bars.

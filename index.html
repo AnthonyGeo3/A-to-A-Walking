@@ -1393,8 +1393,9 @@
             return Math.abs(h);
         }
 
-        // One entry per previous challenge year: the nearest memorable log to this date,
-        // per person, within a ±2 day window (exact day always wins).
+        // One entry per previous challenge year: that person's memorable log from exactly
+        // this date, a year (or two, or three) ago. No fuzzy window — it either happened
+        // on this day or it didn't.
         function collectMemories() {
             const today = startOfDay(new Date());
             const yearsBack = Math.max(0, currentChallengeYear() - 1);
@@ -1407,15 +1408,12 @@
                 const picks = {};
 
                 ['user1', 'user2'].forEach(uid => {
-                    let best = null, bestDist = Infinity;
+                    let best = null;
                     candidates.forEach(l => {
                         if (l.userId !== uid) return;
-                        const dist = Math.abs((startOfDay(l.date.toDate()) - target) / 86400000);
-                        if (dist > 2) return;
-                        // Nearest day wins; on a tie, the bigger day wins.
-                        if (dist < bestDist || (dist === bestDist && best && l.steps > best.steps)) {
-                            best = l; bestDist = dist;
-                        }
+                        if (startOfDay(l.date.toDate()).getTime() !== target.getTime()) return;
+                        // More than one log on the same day: the bigger one wins.
+                        if (!best || l.steps > best.steps) best = l;
                     });
                     if (best) picks[uid] = best;
                 });
