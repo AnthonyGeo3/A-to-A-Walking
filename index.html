@@ -544,52 +544,140 @@
         ];
 
         // --- 🌏 BEYOND PAPHOS ---
-        // The all-time journey continues east from Cyprus. These only ever apply to the
+        // The all-time journey continues east from Cyprus, out through Asia, down through
+        // Indonesia to Australia and finishing in New Zealand. These only ever apply to the
         // cumulative total (the annual journey replays MASTER_MILESTONES from zero each
-        // year), so the gaps here are deliberately bigger — one landmark every week or two
-        // rather than every couple of days.
+        // year), so the gaps are bigger here — no more than ~300k between stops.
         const BEYOND_MILESTONES = [
+            { steps: 4663824, label: "Alexandria 🏛️", description: "Alexandria, Egypt! Founded by Alexander the Great, home to the ancient world's greatest library and a lighthouse that stood for 1,600 years. The sea has swallowed most of it, but the corniche is still glorious. 🏛️" },
             { steps: 4808781, label: "Beirut 🇱🇧", description: "Ahlan wa sahlan, Beirut! You've crossed the eastern Mediterranean to Lebanon's battered, beautiful capital — Roman baths, corniche sunsets and the best mezze on the sea. 🇱🇧" },
             { steps: 4896834, label: "Cairo 🇪🇬", description: "You've reached Cairo! The Nile, the call to prayer over a thousand minarets, and the Pyramids of Giza sitting on the edge of town like they've always been there. Because they have. 🇪🇬" },
             { steps: 5000000, label: "5 Million! 🎊", description: "Five million steps. Five. Million. Written out that's 5,000,000 individual times you picked a foot up and put it down again. Take the rest of the day off. 🎊" },
-            { steps: 5122000, label: "Route 66 Full 🛣️", description: "The whole Mother Road! Chicago to Santa Monica, 3,940 km of diners, motels and desert — you've now walked every last mile of it. Get your kicks. 🛣️" },
+            { steps: 5051774, label: "Amman 🇯🇴", description: "Marhaba from Amman! Jordan's hill-city capital, built across nineteen hills, with a Roman theatre in the middle of the downtown traffic and the best falafel queue in the Middle East. 🇯🇴" },
             { steps: 5190776, label: "Petra 🏜️", description: "Welcome to Petra! Squeeze down the Siq — a slot canyon barely wide enough for a cart — and the Treasury appears, carved straight into rose-red rock 2,000 years ago. 🏜️" },
+            { steps: 5407299, label: "Baku 🇦🇿", description: "Salam from Baku, the City of Winds! Azerbaijan's Caspian capital, where a walled medieval old town sits under three enormous flame-shaped skyscrapers. 🇦🇿" },
+            { steps: 5511000, label: "Luxor 𓂀", description: "You've walked up the Nile to Luxor — the world's greatest open-air museum. Karnak, the Valley of the Kings, and Tutankhamun's tomb all within a few miles of each other. 𓂀" },
             { steps: 5610917, label: "Baghdad 🇮🇶", description: "You've walked to Baghdad, on the banks of the Tigris. Once the largest city on Earth and the capital of a golden age of maths, medicine and astronomy. 🇮🇶" },
             { steps: 5751500, label: "Everest × 500 🏔️", description: "Five hundred Everests. If every step you'd taken had gone straight up, you'd be 4,424 km above the planet — well past the ISS, halfway to nowhere in particular. 🏔️" },
             { steps: 5979606, label: "Tehran 🇮🇷", description: "Salaam from Tehran! Iran's vast capital sits beneath the snow-capped Alborz mountains — grand bazaars, tiled palaces, and a serious appetite for tea and poetry. 🇮🇷" },
+            { steps: 6000000, label: "6 Million 🎈", description: "Six million. That's roughly 4,600 km — London to Tehran with a bit spare, or the whole of the Trans-Siberian's first leg. 🎈" },
+            { steps: 6306523, label: "Isfahan 🕌", description: "Isfahan — 'half the world', as the old Persian saying goes. A vast blue-tiled square, honey-coloured bridges over the river, and some of the most beautiful buildings ever made. 🕌" },
+            { steps: 6485700, label: "Continental Divide 🥾", description: "The Continental Divide Trail — 4,989 km from Mexico to Canada along the spine of the Rockies. One of the toughest long walks on Earth, and you've done the distance. 🥾" },
             { steps: 6732493, label: "Riyadh 🇸🇦", description: "You've crossed into the Arabian Peninsula and reached Riyadh — mud-brick forts and glass towers side by side, with the Empty Quarter waiting to the south. 🇸🇦" },
-            { steps: 6946794, label: "Samarkand 🇺🇿", description: "Samarkand! The great crossroads of the Silk Road — turquoise domes, the Registan's tiled madrasas, and 2,700 years of caravans passing through. 🇺🇿" },
+            { steps: 6867143, label: "Accra 🇬🇭", description: "Akwaaba! Welcome to Accra, Ghana's Atlantic capital — highlife music, jollof rice, and a coastline of old trading forts. West Africa's friendliest front door. 🇬🇭" },
+            { steps: 7000000, label: "7 Million 🎯", description: "Seven million steps. At an average stride you've now covered around 5,400 km — further than New York to Rome. 🎯" },
+            { steps: 7105202, label: "Toronto 🇨🇦", description: "You've crossed the Atlantic to Toronto! The CN Tower, a lake so big it has tides, and a city where half the population was born somewhere else. 🇨🇦" },
+            { steps: 7276048, label: "Bishkek 🇰🇬", description: "Welcome to Bishkek, Kyrgyzstan — a leafy Soviet-planned grid with the snow-covered Tian Shan mountains rearing up at the end of every street. 🇰🇬" },
             { steps: 7404190, label: "Dubai 🇦🇪", description: "Welcome to Dubai — where a fishing village turned into the Burj Khalifa in one lifetime. The world's tallest building is 828 m; you'd have to climb it about 1,100 times to match this walk. 🇦🇪" },
+            { steps: 7500000, label: "7½ Million 🥳", description: "Seven and a half million. Halfway between the seven and the eight, and a perfectly good excuse for cake. 🥳" },
+            { steps: 7632535, label: "Kabul 🇦🇫", description: "Kabul, cradled in a valley of the Hindu Kush at 1,800 m. A Silk Road city for two thousand years, with mountains on every horizon and the finest pomegranates anywhere. 🇦🇫" },
             { steps: 7850338, label: "Muscat 🇴🇲", description: "Salaam from Muscat! Oman's low-rise white capital, hemmed in by jagged mountains and turquoise sea. Frankincense in the souq, turtles on the beaches. 🇴🇲" },
+            { steps: 7932153, label: "Chicago 🌭", description: "You've reached Chicago — the Windy City. Deep-dish pizza, the blues, the world's first skyscraper, and a river they dyed green once and never really stopped. 🌭" },
+            { steps: 8000000, label: "8 Million 💫", description: "Eight million steps. Somewhere around here the pedometer stopped being a novelty and became a way of life. 💫" },
             { steps: 8320000, label: "The Amazon 🛶", description: "The full length of the Amazon River — 6,400 km from the Peruvian Andes to the Atlantic. You've out-walked the greatest river on Earth. 🛶" },
             { steps: 8456238, label: "Karachi 🇵🇰", description: "You've reached Karachi, Pakistan's enormous port city on the Arabian Sea. Twenty million people, biryani on every corner, and the gateway to South Asia. 🇵🇰" },
             { steps: 8645000, label: "The Nile 🐊", description: "The Nile, end to end — 6,650 km from Burundi to the Mediterranean. The longest river in the world, walked. 🐊" },
             { steps: 8934757, label: "Delhi 🇮🇳", description: "Namaste, Delhi! India's sprawling capital — Mughal tombs, the Red Fort, chaotic Chandni Chowk, and the Taj Mahal a few hours down the road. 🇮🇳" },
+            { steps: 9000000, label: "9 Million ✨", description: "Nine million steps and counting. One more million and the counter grows a whole extra digit. ✨" },
             { steps: 9091927, label: "Ulaanbaatar 🇲🇳", description: "Sain baina uu! You've reached Ulaanbaatar, the world's coldest capital, where the city stops abruptly and the Mongolian steppe begins. 🇲🇳" },
+            { steps: 9156839, label: "Agra 🤍", description: "Agra — and the Taj Mahal. Twenty thousand workers, twenty-two years, and a thousand elephants, all so a grieving emperor could build his wife the most beautiful building on Earth. 🤍" },
+            { steps: 9468580, label: "Kilimanjaro 🦓", description: "You've reached Kilimanjaro, the roof of Africa — 5,895 m of free-standing volcano rising straight out of the Tanzanian plains, with glaciers on top and giraffes at the bottom. 🦓" },
             { steps: 9603086, label: "Mumbai 🇮🇳", description: "Welcome to Mumbai! Bollywood, the Gateway of India, dabbawalas delivering 200,000 lunchboxes a day, and monsoon rain like a bucket over the head. 🇮🇳" },
             { steps: 9715648, label: "Kathmandu 🇳🇵", description: "Namaste from Kathmandu! Prayer flags, stupas, and the thin mountain air of the Himalayas. From here the trekkers head off towards Everest — you've already done the hard bit. 🇳🇵" },
+            { steps: 9781691, label: "Varanasi 🪔", description: "Varanasi, on the Ganges — possibly the oldest continuously inhabited city on Earth. Stone steps down to the river, floating candles at dusk, and pilgrims at every one of them. 🪔" },
             { steps: 10000000, label: "10 Million! 🏆", description: "TEN MILLION STEPS. Eight thousand kilometres of pavement, path and puddle. Whatever the pair of you had planned for tonight, make it something with cake in it. 🏆" },
             { steps: 10135455, label: "Goa 🏖️", description: "You've reached Goa — Portuguese churches, palm-fringed sand, and the most relaxed corner of India. Feet up. 🏖️" },
+            { steps: 10244000, label: "Route 66 × 2 🚗", description: "Chicago to Santa Monica and all the way back again. 7,880 km of Mother Road, twice over, without once stopping at a motel. 🚗" },
+            { steps: 10389862, label: "Grand Canyon 🏜️", description: "The Grand Canyon — 446 km long, 1.6 km deep, and two billion years of rock stacked up in stripes. Photos genuinely do not prepare you. 🏜️" },
+            { steps: 10583583, label: "Las Vegas 🎰", description: "VEGAS, BABY. Neon in the middle of the Mojave, a fake Eiffel Tower, a fake Venice, and an all-you-can-eat buffet at three in the morning. What happens on the walk stays on the walk. 🎰" },
             { steps: 10606079, label: "Beijing 🇨🇳", description: "Nǐ hǎo, Beijing! The Forbidden City, Tiananmen Square, and the Great Wall snaking over the hills an hour north. 🇨🇳" },
+            { steps: 10785402, label: "Xi'an 🏺", description: "Xi'an — eastern end of the Silk Road, and home to the Terracotta Army: 8,000 life-sized soldiers, every face different, buried for 2,200 years until a farmer dug a well. 🏺" },
             { steps: 10921508, label: "Chennai 🇮🇳", description: "Vanakkam from Chennai! South India's Bay of Bengal capital — Tamil temples, filter coffee, and one of the longest urban beaches in the world. 🇮🇳" },
+            { steps: 11000000, label: "11 Million 🎖️", description: "Eleven million. Around 8,460 km — roughly the distance from here to Beijing, and you've done every metre of it on foot. 🎖️" },
+            { steps: 11044355, label: "Los Angeles 🌴", description: "You've reached LA! Palm trees, the Hollywood sign, Pacific sunsets and traffic so bad that walking might genuinely have been quicker. 🌴" },
             { steps: 11358124, label: "Maldives 🐠", description: "You've reached the Maldives — 1,200 coral islands scattered across the Indian Ocean, none of them more than a couple of metres above the water. Snorkel time. 🐠" },
             { steps: 11501201, label: "Seoul 🇰🇷", description: "Annyeong, Seoul! Palaces wedged between skyscrapers, mountains inside the city limits, and street food until 4am. 🇰🇷" },
             { steps: 11589954, label: "Colombo 🇱🇰", description: "Ayubowan from Colombo! Sri Lanka's seafront capital — colonial arcades, hoppers for breakfast, and hill-country tea plantations a train ride inland. 🇱🇰" },
+            { steps: 11846917, label: "Yangon 🇲🇲", description: "Welcome to Yangon, Myanmar. The Shwedagon Pagoda rises 100 m above the city, plated in gold and topped with thousands of diamonds — and it's been there since before England had a king. 🇲🇲" },
             { steps: 11984934, label: "Shanghai 🇨🇳", description: "Welcome to Shanghai! The Bund's old riverfront facing off against the Pudong skyline across the water — the past and the future glaring at each other over a river. 🇨🇳" },
+            { steps: 12000000, label: "12 Million 🌟", description: "Twelve million steps. That's a dozen million. A round number so large it's stopped meaning very much — which is exactly why it deserves a fuss. 🌟" },
             { steps: 12075700, label: "Trans-Siberian 🚂", description: "Moscow to Vladivostok — 9,289 km, seven time zones, six days on a train. You've done the whole thing on foot, without the dumplings sold at the station stops. 🚂" },
             { steps: 12363456, label: "Tokyo 🗼", description: "Konnichiwa, Tokyo! The biggest city on Earth — neon canyons in Shinjuku, quiet shrines down side streets, and the best convenience-store food in existence. 🗼" },
             { steps: 12564138, label: "Bangkok 🇹🇭", description: "Sawasdee from Bangkok! Golden temples, longtail boats on the Chao Phraya, and a night market on every corner. 🇹🇭" },
             { steps: 12599000, label: "Hong Kong 🇭🇰", description: "You've reached Hong Kong — Victoria Harbour, the Star Ferry, skyscrapers stacked up a mountainside, and dim sum for breakfast. 🇭🇰" },
+            { steps: 12769012, label: "Taipei 🇹🇼", description: "Welcome to Taipei! Night markets that run till dawn, hot springs in the hills, bubble tea on every corner, and a skyscraper built with a 660-tonne pendulum inside it to stop it swaying. 🇹🇼" },
+            { steps: 12857365, label: "Cape Town 🐧", description: "Cape Town — Table Mountain with its tablecloth of cloud, two oceans meeting at the Cape, vineyards up the valley and penguins on the beach. 🐧" },
+            { steps: 13000000, label: "13 Million 🍀", description: "Thirteen million. Unlucky for some; the pair of you have walked roughly 10,000 km, so clearly not for you. 🍀" },
+            { steps: 13076294, label: "Phuket 🏝️", description: "You've reached Phuket — limestone karsts jutting out of a warm green sea, longtail boats, and beaches that look Photoshopped even when they aren't. 🏝️" },
             { steps: 13184232, label: "Phnom Penh 🇰🇭", description: "Welcome to Phnom Penh, where the Mekong meets the Tonlé Sap. Cambodia's riverside capital, with Angkor Wat's forest temples to the north. 🇰🇭" },
+            { steps: 13410250, label: "Ho Chi Minh City 🛵", description: "Xin chào from Ho Chi Minh City! Nine million people and about seven million scooters, bánh mì on every corner, and a coffee culture that runs on condensed milk. 🛵" },
+            { steps: 13600933, label: "Medan 🌋", description: "Medan, northern Sumatra — gateway to Lake Toba, a lake so vast it fills the crater of a supervolcano that nearly wiped out humanity 74,000 years ago. Bit of a lively neighbourhood. 🌋" },
             { steps: 13909653, label: "Kuala Lumpur 🇲🇾", description: "Selamat datang, KL! The Petronas Towers, jungle in the middle of the city, and a food scene where Malay, Chinese and Indian cooking all crash happily into each other. 🇲🇾" },
+            { steps: 14000000, label: "14 Million 🎉", description: "Fourteen million steps. Ten and a half thousand kilometres. You've walked further than most people will drive this decade. 🎉" },
             { steps: 14299319, label: "Singapore 🇸🇬", description: "You've walked to Singapore — the tip of mainland Asia. Supertrees, hawker centres, and not a single piece of litter anywhere. 🇸🇬" },
+            { steps: 14394900, label: "Britain's Coast 🏴󠁧󠁢󠁷󠁬󠁳󠁿", description: "The entire coastline of mainland Britain — 11,073 km of it, every headland and estuary, all the way round and back to where you started. Home turf, the long way. 🏴󠁧󠁢󠁷󠁬󠁳󠁿" },
+            { steps: 14738616, label: "Kota Kinabalu 🦧", description: "Borneo! Kota Kinabalu sits under Mount Kinabalu, and in the rainforest behind it live orangutans, pygmy elephants and proboscis monkeys with truly regrettable noses. 🦧" },
+            { steps: 14783349, label: "Brunei 🕌", description: "The Sultanate of Brunei — a tiny, immensely wealthy country wrapped in rainforest, with a gold-domed mosque reflected in its own lagoon and a royal palace of 1,788 rooms. 🕌" },
+            { steps: 14887676, label: "Palembang 🌉", description: "Palembang, Sumatra — one of Indonesia's oldest cities, once the capital of a maritime empire that ruled these seas for six hundred years. Try the pempek. 🌉" },
+            { steps: 15000000, label: "15 Million 🎆", description: "Fifteen million. Three-quarters of the way to twenty, and comfortably past 11,500 km. 🎆" },
+            { steps: 15359120, label: "Marathon × 280 🏅", description: "Two hundred and eighty marathons. If you'd run one a week you'd have started in 2021 and only just be finishing. 🏅" },
             { steps: 15441183, label: "Jakarta 🇮🇩", description: "Selamat datang, Jakarta! You've crossed the equator into Indonesia — 17,000 islands, 700 languages, and the busiest capital in Southeast Asia. 🇮🇩" },
+            { steps: 15611016, label: "Guam 🌊", description: "Guam, out in the middle of the Pacific. Just off its coast is the Mariana Trench — 11 km straight down, the deepest place on the planet. Don't look down. 🌊" },
+            { steps: 15832241, label: "Christmas Island 🦀", description: "Christmas Island, in the middle of the Indian Ocean. Once a year 50 million red crabs march from the forest to the sea, and the island simply closes the roads and lets them. 🦀" },
+            { steps: 15924473, label: "Yogyakarta 🛕", description: "Yogyakarta, the soul of Java — batik, gamelan, a working sultan's palace, and Borobudur at dawn: the largest Buddhist temple on Earth, rising out of the mist. 🛕" },
+            { steps: 16000000, label: "16 Million 🌠", description: "Sixteen million steps — about 12,300 km. Roughly the distance from the North Pole to the South Pole. 🌠" },
+            { steps: 16059184, label: "Surabaya 🦈", description: "Surabaya, Java's gritty second city — its name means 'shark-crocodile', which tells you most of what you need to know about how it sees itself. 🦈" },
+            { steps: 16157007, label: "Mount Bromo 🌋", description: "Mount Bromo at sunrise — a smoking cone in the middle of a sea of volcanic sand, with the light coming up pink over the ridge. Worth the 3am start. 🌋" },
+            { steps: 16353112, label: "Makassar ⛵", description: "Makassar, Sulawesi — home port of the Bugis sailors, whose enormous wooden pinisi schooners are still built by hand on the beach, without plans. ⛵" },
             { steps: 16428984, label: "Bali 🏝️", description: "Bali! Rice terraces stepping down the hillsides, volcanoes in the mist, temple offerings on every doorstep. Stay a while. 🏝️" },
+            { steps: 16519630, label: "Lombok 🌺", description: "Lombok — Bali's quieter neighbour. Waterfalls in the jungle, the Gili Islands offshore, and Mount Rinjani with a crater lake sitting inside the top of it. 🌺" },
+            { steps: 16765849, label: "Komodo 🦎", description: "Komodo Island, home of the dragons — three metres long, venomous, and entirely unbothered by you. Also some of the best diving on Earth, if you'd rather. 🦎" },
+            { steps: 17000000, label: "17 Million 🎇", description: "Seventeen million. You're now deep in the Indonesian archipelago with the Timor Sea ahead — the last stretch before Australia. 🎇" },
+            { steps: 17289967, label: "Kupang 🌅", description: "Kupang, on the far tip of West Timor. The last town before the open sea, where Captain Bligh finally made landfall after 6,700 km in an open boat. He'd have preferred your route. 🌅" },
+            { steps: 17553280, label: "Marathon × 320 🏃", description: "Three hundred and twenty marathons, back to back. That is not a typo. 🏃" },
+            { steps: 17829650, label: "Everest × 1,550 ⛰️", description: "One thousand five hundred and fifty Everests. Stacked end to end that's 13,700 km of climbing — and you did it on the flat, which frankly sounds nicer. ⛰️" },
+            { steps: 18000000, label: "18 Million 🚩", description: "Eighteen million steps. Land ho — Australia is now genuinely within reach. 🚩" },
             { steps: 18123947, label: "Darwin 🇦🇺", description: "AUSTRALIA. You've made landfall at Darwin, top end of the Northern Territory — crocodiles, mango season, and the sunset over Mindil Beach. 🇦🇺" },
+            { steps: 18289570, label: "Kakadu 🐊", description: "Kakadu National Park — 20,000 km² of wetlands, escarpments and rock art painted continuously for 20,000 years. The oldest art gallery on the planet, still open. 🐊" },
+            { steps: 18476191, label: "Katherine 💦", description: "Katherine Gorge — thirteen sandstone gorges carved by the river, best seen from a canoe, ideally one going the same way as the current. 💦" },
+            { steps: 18650360, label: "Marathon × 340 🥇", description: "Three hundred and forty marathons. At this point the marathon has stopped being a unit of achievement and become a unit of measurement. 🥇" },
+            { steps: 18821708, label: "Port Moresby 🇵🇬", description: "Port Moresby, Papua New Guinea — a country of 850 languages, birds of paradise, and highland valleys that stayed unknown to the outside world until the 1930s. 🇵🇬" },
+            { steps: 19000000, label: "19 Million 🎊", description: "Nineteen million. One million to go until twenty, which is the sort of number you tell people at parties. 🎊" },
             { steps: 19080569, label: "Perth 🇦🇺", description: "Welcome to Perth, the most isolated big city on the planet — closer to Jakarta than to Sydney, with white sand beaches and endless sun. 🇦🇺" },
-            { steps: 20000000, label: "20 Million! 🌟", description: "Twenty million steps. Sixteen thousand kilometres. At this point the walk has outlasted phones, shoes and probably several sets of headphones. 🌟" },
+            { steps: 19248778, label: "Tennant Creek 🌵", description: "Tennant Creek, slap in the middle of the Northern Territory. Nearest city: 500 km. Nearest other city: also 500 km, the other way. 🌵" },
+            { steps: 19443373, label: "Kalgoorlie ⛏️", description: "Kalgoorlie, Western Australia — a gold rush town that never stopped. The Super Pit is 3.5 km long and 600 m deep, and you can watch it from the pub. ⛏️" },
+            { steps: 19663547, label: "Uluru 🪨", description: "Uluru. 348 m of sandstone standing alone in the red centre, sacred to the Anangu for tens of thousands of years, and it genuinely does change colour as the sun goes down. 🪨" },
+            { steps: 19773333, label: "Mount Isa ⚒️", description: "Mount Isa, outback Queensland — technically one of the largest cities in the world by area, on account of its boundaries enclosing 43,000 km² of essentially nothing. ⚒️" },
+            { steps: 20000000, label: "20 Million! 🌟", description: "TWENTY MILLION STEPS. Fifteen thousand kilometres. At this point the walk has outlasted phones, shoes and probably several sets of headphones. 🌟" },
+            { steps: 20085996, label: "Townsville 🐢", description: "Townsville, north Queensland — gateway to Magnetic Island, where the koalas outnumber the traffic lights by a comfortable margin. 🐢" },
+            { steps: 20333579, label: "Whitsundays 🤍", description: "The Whitsundays — 74 islands and Whitehaven Beach, whose sand is 98% pure silica: squeaky underfoot, never hot, and blinding white. 🤍" },
+            { steps: 20442764, label: "Longreach 🐑", description: "Longreach, deep in the Queensland outback. Birthplace of Qantas, home of the Stockman's Hall of Fame, and roughly a thousand kilometres from anywhere you've heard of. 🐑" },
+            { steps: 20705400, label: "Everest × 1,800 🗻", description: "Eighteen hundred Everests. There is no sensible way to picture this, so don't try — just accept the medal. 🗻" },
+            { steps: 20843167, label: "Rockhampton 🥩", description: "Rockhampton — beef capital of Australia, sitting exactly on the Tropic of Capricorn. There is a line painted on the road and everything. 🥩" },
+            { steps: 20970643, label: "Fiji 🌴", description: "Fiji! 333 islands in the South Pacific, water the colour of a swimming pool, and a national greeting — 'Bula!' — shouted at you with genuine delight roughly every ninety seconds. 🌴" },
+            { steps: 21000000, label: "21 Million 🎈", description: "Twenty-one million steps. Old enough to drink in America. 🎈" },
+            { steps: 21239045, label: "Fraser Island 🐕", description: "K'gari (Fraser Island) — the largest sand island on Earth, with rainforest growing straight out of the dunes and freshwater lakes perched on top of the sand. 🐕" },
+            { steps: 21328011, label: "Adelaide 🍷", description: "Adelaide, the city of churches — planned on a grid, ringed by parkland, and surrounded by the Barossa Valley. A very civilised place to arrive on foot. 🍷" },
+            { steps: 21518905, label: "Brisbane ☀️", description: "Brisbane! A river winding through the middle, 280 days of sunshine a year, and a man-made beach in the centre of town because why not. ☀️" },
+            { steps: 21703470, label: "Byron Bay 🏄", description: "Byron Bay — Australia's most easterly point. Stand at the lighthouse at dawn and you're the first person on the mainland to see the sun. 🏄" },
+            { steps: 22000000, label: "22 Million 🎆", description: "Twenty-two million. Sydney is now less than 200,000 steps away. You can nearly see the bridge from here. 🎆" },
             { steps: 22143889, label: "Melbourne 🇦🇺", description: "G'day Melbourne! Laneway coffee, street art, trams, and four seasons before lunchtime. You've walked the length of the world to get here. 🇦🇺" },
-            { steps: 22186029, label: "Sydney 🎆", description: "SYDNEY. The Opera House, the Harbour Bridge, and the other side of the planet under your feet. From two front doors in North Wales to Sydney Harbour — one step at a time. 🎆" }
+            { steps: 22186029, label: "Sydney 🎇", description: "SYDNEY. The Opera House, the Harbour Bridge, and the other side of the planet under your feet. From two front doors in North Wales to Sydney Harbour — one step at a time. 🎇" },
+            { steps: 22265898, label: "Snowy Mountains 🎿", description: "The Snowy Mountains — yes, Australia has ski fields, and yes, they get more snow than Switzerland's lower resorts. Mount Kosciuszko is the easiest of the seven summits by a mile. 🎿" },
+            { steps: 22391271, label: "Lord Howe Island 🦜", description: "Lord Howe Island — a crescent of volcanic rock 600 km out in the Tasman Sea, with only 400 residents and a strict limit of 400 visitors at a time. Book early. 🦜" },
+            { steps: 22490140, label: "Marathon × 410 🏆", description: "Four hundred and ten marathons. One a day would have taken you a year and a half without a single rest day. 🏆" },
+            { steps: 22824312, label: "Hobart 🍎", description: "Hobart, Tasmania — Australia's southernmost city, under the bulk of Mount Wellington. Next stop south is Antarctica, and the ships leave from right here. 🍎" },
+            { steps: 23000000, label: "23 Million 🌊", description: "Twenty-three million steps, and out over the Tasman Sea. New Zealand ahead. 🌊" },
+            { steps: 23291724, label: "Cape Reinga 🌏", description: "Cape Reinga, the very top of New Zealand — where the Tasman Sea and the Pacific Ocean visibly collide in a line of churning water offshore. In Māori tradition, spirits depart from here. 🌏" },
+            { steps: 23425501, label: "Bay of Islands ⛵", description: "The Bay of Islands — 144 of them, dolphins in the water, and the Treaty grounds at Waitangi where modern New Zealand began. ⛵" },
+            { steps: 23666961, label: "Auckland 🇳🇿", description: "Kia ora, Auckland! The City of Sails, built across 53 dormant volcanoes, with more boats per head than anywhere else on Earth. 🇳🇿" },
+            { steps: 23821313, label: "Hobbiton 🏡", description: "HOBBITON. Forty-four hobbit holes set into the green hills of the Waikato, with the Party Tree, the Green Dragon and a very small round door with a brass knob in the exact middle. You've walked further than Frodo. 🏡" },
+            { steps: 23941763, label: "Lake Taupō 🏞️", description: "Lake Taupō — a lake the size of Singapore, sitting in the crater of a volcano whose last major eruption turned the sky red as far away as Rome and China. 🏞️" },
+            { steps: 24000000, label: "24 Million 🥂", description: "Twenty-four million steps. That's 18,500 km — very nearly the furthest it is possible to get from home without starting to come back. 🥂" },
+            { steps: 24305944, label: "Wellington 🎬", description: "Wellington! The world's windiest capital and its coolest little one — cable cars, coffee roasters, and the film workshop where Middle-earth was actually built. 🎬" },
+            { steps: 24504437, label: "Aoraki / Mt Cook 🏔️", description: "Aoraki / Mount Cook — 3,724 m, New Zealand's highest, where Edmund Hillary trained before Everest. The night sky here is a designated dark sky reserve. 🏔️" },
+            { steps: 24581680, label: "Christchurch 🌸", description: "Christchurch, the garden city — punting on the Avon, a cathedral being rebuilt stone by stone, and the Southern Alps rising up behind it. 🌸" },
+            { steps: 24618589, label: "Queenstown 🏔️", description: "QUEENSTOWN. The end of the road, and about as far from North Wales as it is possible to walk: mountains straight out of a lake, and the town where bungee jumping was invented. From your two front doors to the bottom of the world. Pour something fizzy. 🏔️" }
         ];
 
         // Both lists are relied on being in ascending order by the "next goal" lookups
@@ -1331,12 +1419,20 @@
             });
 
             const monthName = today.toLocaleString('default', { month: 'long' });
+
+            // Days done / days left in the challenge year — the number that actually
+            // matters when you're chasing a target by 30 Sep.
             const yr = currentChallengeYear();
+            const yrStart = challengeYearStart(yr), yrEnd = challengeYearEnd(yr);
+            const daysDone = Math.floor((startOfDay(today) - yrStart) / 86400000) + 1;
+            const daysLeft = Math.max(0, Math.round((yrEnd - startOfDay(today)) / 86400000) - 1);
+            const plural = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`;
+
             container.innerHTML = `
                 <h3 class="text-sm font-bold text-gray-700 text-center mb-3 mt-4">⚔️ Head to Head</h3>
                 ${rivalryBarHtml('This week (Mon–Sun)', weekAnt, weekAmy)}
                 ${rivalryBarHtml(`This month (${monthName})`, monthAnt, monthAmy)}
-                ${rivalryBarHtml(`This year (Year ${yr})`, annualSteps.user1, annualSteps.user2)}
+                ${rivalryBarHtml(`This year (${plural(daysDone, 'day')} done, ${plural(daysLeft, 'day')} left)`, annualSteps.user1, annualSteps.user2)}
             `;
         }
 

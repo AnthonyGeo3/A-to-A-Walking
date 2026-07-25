@@ -11,7 +11,7 @@
 - Backdated logs near the boundary land in the correct year automatically because it's log-date based.
 - Before 1 Oct 2026, year 2 annual = 0-but-really-year-1, so everything ships early and rolls over seamlessly on the day.
 
-**Pre-flight check (do first):** verify each user doc's `steps` exactly equals the sum of their logs. Passport dates and all annual maths silently inherit any discrepancy.
+**Pre-flight check:** ✅ done — stored `steps` matches the sum of logs for both of you. `window.stepAudit()` in the browser console re-runs it any time, and the app warns in the console automatically if the two ever drift apart.
 
 ## 2. Progress bars (dual-layer, per person card)
 
@@ -37,7 +37,7 @@
 
 ## 5. Head to head
 
-- Add a third rivalry bar: **This year (Year N)** alongside week and month.
+- Add a third rivalry bar alongside week and month, labelled **"This year (X days done, Y days left)"** — the days-left number is what you actually plan against when chasing an end-of-September target.
 
 ## 6. Memories — "A year ago today"
 
@@ -49,8 +49,8 @@
 
 ## 7. Content & polish
 
-- Draft beyond-Paphos milestone list (east from Cyprus; gaps free to exceed 70k since dense ones replay annually; keep postcard-description style). To be written for review.
-- Stretch goals: proposed to become annual-basis (they're user-editable anyway) — **confirm before coding**.
+- Beyond-Paphos milestone list — **done and approved**. 129 stops from Alexandria to Queenstown (24.6M), max gap ~300k. Includes a marker at every million (plus 7.5M), the arbitrary-equivalence stamps (Everest × N, Marathon × N, the Nile, Route 66 × 2, Britain's coastline), Las Vegas, and New Zealand finishing at Queenstown via Auckland, Hobbiton and Wellington.
+- Stretch goals: **confirmed all-time, not annual.** They stay on the cumulative total.
 - Header becomes year-aware: "Year 2 · Est. Oct 25".
 - Bump service-worker `CACHE_NAME`.
 
