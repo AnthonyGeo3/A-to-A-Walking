@@ -93,6 +93,69 @@
             bottom: -6px;
             transform: translateX(-50%);
         }
+        /* Triangle pointing down from the top — used for the "you last year" ghost,
+           so it can never collide with the peer marker along the bottom edge. */
+        .peer-marker.top {
+            border-top-width: 12px;
+            border-top-style: solid;
+            top: -6px;
+            bottom: auto;
+            transform: translateX(-50%);
+        }
+        .marker-ghost { opacity: 0.4; }
+
+        /* Slim all-time strip — the journey that never resets */
+        .mini-track {
+            position: relative;
+            height: 8px;
+            border-radius: 99px;
+            background-color: #e9e9ec;
+            border: 1px solid #dcdce1;
+            overflow: visible;
+        }
+        .mini-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.8s ease;
+            opacity: 0.75;
+        }
+        .mini-marker {
+            position: absolute;
+            bottom: -3px;
+            transform: translateX(-50%);
+            transition: left 0.8s ease;
+            z-index: 20;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-bottom-width: 7px;
+            border-bottom-style: solid;
+        }
+
+        /* "A year ago today" memory strip */
+        .memory-strip {
+            background: linear-gradient(90deg, #fdf6e8 0%, #fbf0dc 100%);
+            border: 1px solid #ecd9b8;
+            border-radius: 10px;
+            padding: 7px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .memory-strip:hover { background: #fbf0dc; }
+        .memory-strip .memory-text {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 11px;
+            color: #8a6d3b;
+            font-style: italic;
+        }
 
         /* Passport Styles - Circular Stamps */
         .passport-bg {
@@ -243,7 +306,7 @@
 
         <div class="text-center py-5 px-4 sm:px-6" style="background: linear-gradient(135deg, #ecfdf5 0%, #faf5ff 50%, #ecfdf5 100%); border-bottom: 1px solid rgba(0,0,0,0.04);">
             <h1 class="text-3xl font-bold text-gray-800">A to A Walking!</h1>
-            <p class="text-gray-400 text-sm">Est. Oct 25</p>
+            <p id="header-subtitle" class="text-gray-400 text-sm">Est. Oct 25</p>
         </div>
 
         <div class="p-4 sm:p-6">
@@ -265,6 +328,9 @@
             </form>
         </div>
 
+        <!-- "A year ago today" — stays hidden entirely unless there's a memory to show -->
+        <div id="memories-strip" class="hidden -mt-6 mb-8"></div>
+
         <!-- Horizontal Progress Bars -->
         <div class="space-y-6 mb-8">
             <div id="ant-progress-row"></div>
@@ -278,18 +344,8 @@
                 <select id="stats-filter" class="p-1 border rounded text-sm"></select>
             </div>
             <div class="grid grid-cols-2 gap-4 text-center">
-                <div class="card-ant">
-                    <p class="text-[10px] uppercase font-bold text-green-700">Ant Daily Avg</p>
-                    <p class="text-green-600 font-bold"><span id="user1-avg-steps">0</span></p>
-                    <p class="text-[10px] uppercase font-bold text-green-700 mt-1"><span id="user1-pred-label">Year Prediction</span></p>
-                    <p class="text-green-600 font-bold"><span id="user1-predicted-steps">0</span></p>
-                </div>
-                <div class="card-amy">
-                    <p class="text-[10px] uppercase font-bold text-purple-700">Amy Daily Avg</p>
-                    <p class="text-purple-600 font-bold"><span id="user2-avg-steps">0</span></p>
-                    <p class="text-[10px] uppercase font-bold text-purple-700 mt-1"><span id="user2-pred-label">Year Prediction</span></p>
-                    <p class="text-purple-600 font-bold"><span id="user2-predicted-steps">0</span></p>
-                </div>
+                <div id="user1-stats-card" class="card-ant"></div>
+                <div id="user2-stats-card" class="card-amy"></div>
             </div>
             <div id="heatmap-container" class="mt-4"></div>
             <p id="heatmap-tap-info" class="text-center text-xs text-gray-400 mt-1 h-4"></p>
@@ -486,6 +542,62 @@
             { steps: 3961836, label: "M25 × 16 🛣️", description: "You've lapped the M25 sixteen times! London's 188 km orbital — the nation's favourite traffic jam — now completed on foot, over and over. 🛣️" },
             { steps: 4469179, label: "Paphos 🇨🇾", description: "Paphos, Cyprus! 🇨🇾" }
         ];
+
+        // --- 🌏 BEYOND PAPHOS ---
+        // The all-time journey continues east from Cyprus. These only ever apply to the
+        // cumulative total (the annual journey replays MASTER_MILESTONES from zero each
+        // year), so the gaps here are deliberately bigger — one landmark every week or two
+        // rather than every couple of days.
+        const BEYOND_MILESTONES = [
+            { steps: 4808781, label: "Beirut 🇱🇧", description: "Ahlan wa sahlan, Beirut! You've crossed the eastern Mediterranean to Lebanon's battered, beautiful capital — Roman baths, corniche sunsets and the best mezze on the sea. 🇱🇧" },
+            { steps: 4896834, label: "Cairo 🇪🇬", description: "You've reached Cairo! The Nile, the call to prayer over a thousand minarets, and the Pyramids of Giza sitting on the edge of town like they've always been there. Because they have. 🇪🇬" },
+            { steps: 5000000, label: "5 Million! 🎊", description: "Five million steps. Five. Million. Written out that's 5,000,000 individual times you picked a foot up and put it down again. Take the rest of the day off. 🎊" },
+            { steps: 5122000, label: "Route 66 Full 🛣️", description: "The whole Mother Road! Chicago to Santa Monica, 3,940 km of diners, motels and desert — you've now walked every last mile of it. Get your kicks. 🛣️" },
+            { steps: 5190776, label: "Petra 🏜️", description: "Welcome to Petra! Squeeze down the Siq — a slot canyon barely wide enough for a cart — and the Treasury appears, carved straight into rose-red rock 2,000 years ago. 🏜️" },
+            { steps: 5610917, label: "Baghdad 🇮🇶", description: "You've walked to Baghdad, on the banks of the Tigris. Once the largest city on Earth and the capital of a golden age of maths, medicine and astronomy. 🇮🇶" },
+            { steps: 5751500, label: "Everest × 500 🏔️", description: "Five hundred Everests. If every step you'd taken had gone straight up, you'd be 4,424 km above the planet — well past the ISS, halfway to nowhere in particular. 🏔️" },
+            { steps: 5979606, label: "Tehran 🇮🇷", description: "Salaam from Tehran! Iran's vast capital sits beneath the snow-capped Alborz mountains — grand bazaars, tiled palaces, and a serious appetite for tea and poetry. 🇮🇷" },
+            { steps: 6732493, label: "Riyadh 🇸🇦", description: "You've crossed into the Arabian Peninsula and reached Riyadh — mud-brick forts and glass towers side by side, with the Empty Quarter waiting to the south. 🇸🇦" },
+            { steps: 6946794, label: "Samarkand 🇺🇿", description: "Samarkand! The great crossroads of the Silk Road — turquoise domes, the Registan's tiled madrasas, and 2,700 years of caravans passing through. 🇺🇿" },
+            { steps: 7404190, label: "Dubai 🇦🇪", description: "Welcome to Dubai — where a fishing village turned into the Burj Khalifa in one lifetime. The world's tallest building is 828 m; you'd have to climb it about 1,100 times to match this walk. 🇦🇪" },
+            { steps: 7850338, label: "Muscat 🇴🇲", description: "Salaam from Muscat! Oman's low-rise white capital, hemmed in by jagged mountains and turquoise sea. Frankincense in the souq, turtles on the beaches. 🇴🇲" },
+            { steps: 8320000, label: "The Amazon 🛶", description: "The full length of the Amazon River — 6,400 km from the Peruvian Andes to the Atlantic. You've out-walked the greatest river on Earth. 🛶" },
+            { steps: 8456238, label: "Karachi 🇵🇰", description: "You've reached Karachi, Pakistan's enormous port city on the Arabian Sea. Twenty million people, biryani on every corner, and the gateway to South Asia. 🇵🇰" },
+            { steps: 8645000, label: "The Nile 🐊", description: "The Nile, end to end — 6,650 km from Burundi to the Mediterranean. The longest river in the world, walked. 🐊" },
+            { steps: 8934757, label: "Delhi 🇮🇳", description: "Namaste, Delhi! India's sprawling capital — Mughal tombs, the Red Fort, chaotic Chandni Chowk, and the Taj Mahal a few hours down the road. 🇮🇳" },
+            { steps: 9091927, label: "Ulaanbaatar 🇲🇳", description: "Sain baina uu! You've reached Ulaanbaatar, the world's coldest capital, where the city stops abruptly and the Mongolian steppe begins. 🇲🇳" },
+            { steps: 9603086, label: "Mumbai 🇮🇳", description: "Welcome to Mumbai! Bollywood, the Gateway of India, dabbawalas delivering 200,000 lunchboxes a day, and monsoon rain like a bucket over the head. 🇮🇳" },
+            { steps: 9715648, label: "Kathmandu 🇳🇵", description: "Namaste from Kathmandu! Prayer flags, stupas, and the thin mountain air of the Himalayas. From here the trekkers head off towards Everest — you've already done the hard bit. 🇳🇵" },
+            { steps: 10000000, label: "10 Million! 🏆", description: "TEN MILLION STEPS. Eight thousand kilometres of pavement, path and puddle. Whatever the pair of you had planned for tonight, make it something with cake in it. 🏆" },
+            { steps: 10135455, label: "Goa 🏖️", description: "You've reached Goa — Portuguese churches, palm-fringed sand, and the most relaxed corner of India. Feet up. 🏖️" },
+            { steps: 10606079, label: "Beijing 🇨🇳", description: "Nǐ hǎo, Beijing! The Forbidden City, Tiananmen Square, and the Great Wall snaking over the hills an hour north. 🇨🇳" },
+            { steps: 10921508, label: "Chennai 🇮🇳", description: "Vanakkam from Chennai! South India's Bay of Bengal capital — Tamil temples, filter coffee, and one of the longest urban beaches in the world. 🇮🇳" },
+            { steps: 11358124, label: "Maldives 🐠", description: "You've reached the Maldives — 1,200 coral islands scattered across the Indian Ocean, none of them more than a couple of metres above the water. Snorkel time. 🐠" },
+            { steps: 11501201, label: "Seoul 🇰🇷", description: "Annyeong, Seoul! Palaces wedged between skyscrapers, mountains inside the city limits, and street food until 4am. 🇰🇷" },
+            { steps: 11589954, label: "Colombo 🇱🇰", description: "Ayubowan from Colombo! Sri Lanka's seafront capital — colonial arcades, hoppers for breakfast, and hill-country tea plantations a train ride inland. 🇱🇰" },
+            { steps: 11984934, label: "Shanghai 🇨🇳", description: "Welcome to Shanghai! The Bund's old riverfront facing off against the Pudong skyline across the water — the past and the future glaring at each other over a river. 🇨🇳" },
+            { steps: 12075700, label: "Trans-Siberian 🚂", description: "Moscow to Vladivostok — 9,289 km, seven time zones, six days on a train. You've done the whole thing on foot, without the dumplings sold at the station stops. 🚂" },
+            { steps: 12363456, label: "Tokyo 🗼", description: "Konnichiwa, Tokyo! The biggest city on Earth — neon canyons in Shinjuku, quiet shrines down side streets, and the best convenience-store food in existence. 🗼" },
+            { steps: 12564138, label: "Bangkok 🇹🇭", description: "Sawasdee from Bangkok! Golden temples, longtail boats on the Chao Phraya, and a night market on every corner. 🇹🇭" },
+            { steps: 12599000, label: "Hong Kong 🇭🇰", description: "You've reached Hong Kong — Victoria Harbour, the Star Ferry, skyscrapers stacked up a mountainside, and dim sum for breakfast. 🇭🇰" },
+            { steps: 13184232, label: "Phnom Penh 🇰🇭", description: "Welcome to Phnom Penh, where the Mekong meets the Tonlé Sap. Cambodia's riverside capital, with Angkor Wat's forest temples to the north. 🇰🇭" },
+            { steps: 13909653, label: "Kuala Lumpur 🇲🇾", description: "Selamat datang, KL! The Petronas Towers, jungle in the middle of the city, and a food scene where Malay, Chinese and Indian cooking all crash happily into each other. 🇲🇾" },
+            { steps: 14299319, label: "Singapore 🇸🇬", description: "You've walked to Singapore — the tip of mainland Asia. Supertrees, hawker centres, and not a single piece of litter anywhere. 🇸🇬" },
+            { steps: 15441183, label: "Jakarta 🇮🇩", description: "Selamat datang, Jakarta! You've crossed the equator into Indonesia — 17,000 islands, 700 languages, and the busiest capital in Southeast Asia. 🇮🇩" },
+            { steps: 16428984, label: "Bali 🏝️", description: "Bali! Rice terraces stepping down the hillsides, volcanoes in the mist, temple offerings on every doorstep. Stay a while. 🏝️" },
+            { steps: 18123947, label: "Darwin 🇦🇺", description: "AUSTRALIA. You've made landfall at Darwin, top end of the Northern Territory — crocodiles, mango season, and the sunset over Mindil Beach. 🇦🇺" },
+            { steps: 19080569, label: "Perth 🇦🇺", description: "Welcome to Perth, the most isolated big city on the planet — closer to Jakarta than to Sydney, with white sand beaches and endless sun. 🇦🇺" },
+            { steps: 20000000, label: "20 Million! 🌟", description: "Twenty million steps. Sixteen thousand kilometres. At this point the walk has outlasted phones, shoes and probably several sets of headphones. 🌟" },
+            { steps: 22143889, label: "Melbourne 🇦🇺", description: "G'day Melbourne! Laneway coffee, street art, trams, and four seasons before lunchtime. You've walked the length of the world to get here. 🇦🇺" },
+            { steps: 22186029, label: "Sydney 🎆", description: "SYDNEY. The Opera House, the Harbour Bridge, and the other side of the planet under your feet. From two front doors in North Wales to Sydney Harbour — one step at a time. 🎆" }
+        ];
+
+        // Both lists are relied on being in ascending order by the "next goal" lookups
+        // and the cumulative replays, so make that guaranteed rather than assumed.
+        MASTER_MILESTONES.sort((a, b) => a.steps - b.steps);
+        // Everything, in order — used for the all-time journey and the passport.
+        const ALL_MILESTONES = [...MASTER_MILESTONES, ...BEYOND_MILESTONES].sort((a, b) => a.steps - b.steps);
+
         const SHARED_STRETCH = [{ steps: 1000000, label: "Disneyland!", reward: "🏰" }];
         // Defaults only — the live values are stored on each user's Firestore doc under `stretch`,
         // so either of you can edit them from the app. These are just the starting values.
@@ -514,6 +626,62 @@
         const user2DocRef = doc(publicDataCollection, 'user2');
         const logsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'challengeLogs');
 
+        // --- 📅 CHALLENGE YEAR ENGINE ---
+        // A challenge year runs 1 Oct → 30 Sep. Year 1 = 1 Oct 2025 → 30 Sep 2026.
+        // Annual totals are always *derived from the logs by date*, never stored — so
+        // backdated entries land in the right year automatically and year 1 is untouched.
+        const CHALLENGE_START_YEAR = 2025;
+        const CHALLENGE_START = new Date(CHALLENGE_START_YEAR, 9, 1);
+
+        const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+
+        // 1 = Oct 25–Sep 26, 2 = Oct 26–Sep 27, ... (0 or less for dates before the challenge)
+        function getChallengeYear(date) {
+            // Accepts either a Date or a Firestore Timestamp.
+            const d = (date && typeof date.toDate === 'function') ? date.toDate() : date;
+            const startYear = d.getMonth() >= 9 ? d.getFullYear() : d.getFullYear() - 1;
+            return startYear - CHALLENGE_START_YEAR + 1;
+        }
+        function challengeYearStart(n) { return new Date(CHALLENGE_START_YEAR + n - 1, 9, 1); }
+        function challengeYearEnd(n) { return new Date(CHALLENGE_START_YEAR + n, 9, 1); } // exclusive
+        function currentChallengeYear() { return Math.max(1, getChallengeYear(new Date())); }
+
+        // Steps within the current challenge year, and where each person was on this same
+        // day of the *previous* challenge year (the "ghost" — you vs. you).
+        let annualSteps = { user1: 0, user2: 0 };
+        let ghostSteps  = { user1: 0, user2: 0 };
+
+        function recomputeYearTotals() {
+            const yr = currentChallengeYear();
+            const yrStart = challengeYearStart(yr);
+            const yrEnd = challengeYearEnd(yr);
+            // How many days into the challenge year are we? Used to cut last year off at
+            // the same point, so the comparison is like-for-like.
+            const dayIndex = Math.floor((startOfDay(new Date()) - yrStart) / 86400000);
+            const prevStart = challengeYearStart(yr - 1);
+            const prevCutoff = new Date(prevStart);
+            prevCutoff.setDate(prevCutoff.getDate() + dayIndex + 1); // exclusive
+
+            annualSteps = { user1: 0, user2: 0 };
+            ghostSteps  = { user1: 0, user2: 0 };
+            logData.forEach(l => {
+                if (!l.date || !(l.userId in annualSteps)) return;
+                const d = l.date.toDate();
+                if (d >= yrStart && d < yrEnd) annualSteps[l.userId] += l.steps;
+                else if (yr > 1 && d >= prevStart && d < prevCutoff) ghostSteps[l.userId] += l.steps;
+            });
+        }
+
+        // Sum of a user's logs inside a given challenge year (used by stats + passport).
+        function stepsInChallengeYear(uid, n) {
+            const s = challengeYearStart(n), e = challengeYearEnd(n);
+            return logData.reduce((t, l) => {
+                if (l.userId !== uid || !l.date) return t;
+                const d = l.date.toDate();
+                return (d >= s && d < e) ? t + l.steps : t;
+            }, 0);
+        }
+
         let currentUser = null;
         let userData = { user1: { name: "Ant", steps: 0 }, user2: { name: "Amy", steps: 0 } };
         let logData = [];
@@ -532,10 +700,6 @@
         const user2LogContainer = document.getElementById('user2-log');
         const user1HighScoreContainer = document.getElementById('user1-highscore');
         const user2HighScoreContainer = document.getElementById('user2-highscore');
-        const user1AvgSteps = document.getElementById('user1-avg-steps');
-        const user2AvgSteps = document.getElementById('user2-avg-steps');
-        const user1PredictedSteps = document.getElementById('user1-predicted-steps');
-        const user2PredictedSteps = document.getElementById('user2-predicted-steps');
         const dateDisplay = document.getElementById('date-display');
         const datePrevBtn = document.getElementById('date-prev');
         const dateNextBtn = document.getElementById('date-next');
@@ -647,86 +811,170 @@
         
         // --- Render Helpers ---
 
-        function getNextGoal(steps) {
-            const allGoals = [...MASTER_MILESTONES, ...SHARED_STRETCH].sort((a,b) => a.steps - b.steps);
-            return allGoals.find(g => steps < g.steps) || allGoals[allGoals.length-1];
+        // Next stop on the annual journey (replays the original milestone list from zero each year)
+        function getNextAnnualGoal(steps) {
+            return MASTER_MILESTONES.find(g => steps < g.steps) || MASTER_MILESTONES[MASTER_MILESTONES.length - 1];
+        }
+        // Next stop on the all-time journey (keeps going east past Paphos)
+        function getNextAllTimeGoal(steps) {
+            return ALL_MILESTONES.find(g => steps < g.steps) || ALL_MILESTONES[ALL_MILESTONES.length - 1];
+        }
+
+        const millions = (n) => (n / 1000000).toFixed(2) + 'M';
+
+        // One person's card: the annual hero bar (with peer + ghost markers) sitting above
+        // a slim all-time strip showing the never-resetting cumulative journey.
+        function progressCardHtml(uid) {
+            const isAnt = uid === 'user1';
+            const peer  = isAnt ? 'user2' : 'user1';
+            const mine  = annualSteps[uid];
+            const goal  = getNextAnnualGoal(mine);
+
+            const pct      = Math.min(100, (mine / goal.steps) * 100);
+            const peerPct  = Math.min(100, (annualSteps[peer] / goal.steps) * 100);
+            const ghost    = ghostSteps[uid];
+            const ghostPct = Math.min(100, (ghost / goal.steps) * 100);
+
+            const total     = userData[uid].steps;
+            const atGoal    = getNextAllTimeGoal(total);
+            const atPct     = Math.min(100, (total / atGoal.steps) * 100);
+            const atPeerPct = Math.min(100, (userData[peer].steps / atGoal.steps) * 100);
+
+            const ownColour  = isAnt ? '#22c55e' : '#9333ea';
+            const peerColour = isAnt ? '#9333ea' : '#22c55e';
+
+            return `
+                <div class="${isAnt ? 'card-ant' : 'card-amy'}">
+                <div class="flex justify-between items-end mb-1">
+                    <span class="font-bold ${isAnt ? 'text-green-700' : 'text-purple-700'}">${isAnt ? USER_1_NAME : USER_2_NAME}</span>
+                    <span class="text-xs text-gray-500 font-medium">${goal.label}</span>
+                </div>
+                <div class="progress-bar-track overflow-visible">
+                    <div class="${isAnt ? 'progress-bar-fill-ant' : 'progress-bar-fill-amy'}" style="width: ${pct}%"></div>
+                    <!-- Peer marker (triangle up from the bottom) — the other one of you, this year -->
+                    <div class="peer-marker bottom" style="left: ${peerPct}%; border-bottom-color: ${peerColour};" title="${userData[peer].name}"></div>
+                    ${ghost > 0 ? `<!-- Ghost marker (triangle down from the top) — you, on this day last year -->
+                    <div class="peer-marker top marker-ghost" style="left: ${ghostPct}%; border-top-color: ${ownColour};" title="You this time last year · ${ghost.toLocaleString()}"></div>` : ''}
+                </div>
+                <div class="text-[10px] flex justify-between mt-1 text-gray-500">
+                    <span>${mine.toLocaleString()} steps · ${(mine / 2100).toFixed(1)} mi · ${(mine / 1300).toFixed(1)} km</span>
+                    <span>${(goal.steps - mine).toLocaleString()} to go</span>
+                </div>
+
+                <!-- All-time strip: the journey that never resets -->
+                <div class="mt-3 pt-2 border-t border-black/5">
+                    <div class="flex justify-between items-end mb-1 text-[10px] text-gray-400">
+                        <span class="font-semibold">All time · ${atGoal.label}</span>
+                        <span>${millions(total)} / ${millions(atGoal.steps)}</span>
+                    </div>
+                    <div class="mini-track">
+                        <div class="mini-fill" style="width: ${atPct}%; background: ${ownColour};"></div>
+                        <div class="mini-marker" style="left: ${atPeerPct}%; border-bottom-color: ${peerColour};" title="${userData[peer].name}"></div>
+                    </div>
+                </div>
+                </div>
+            `;
         }
 
         function renderBars() {
-            const antGoal = getNextGoal(userData.user1.steps);
-            const amyGoal = getNextGoal(userData.user2.steps);
-
-            // Ant Bar with Peer Marker
-            const antProgress = Math.min(100, (userData.user1.steps / antGoal.steps) * 100);
-            const antPeerPos = Math.min(100, (userData.user2.steps / antGoal.steps) * 100);
-            
-            document.getElementById('ant-progress-row').innerHTML = `
-                <div class="card-ant">
-                <div class="flex justify-between items-end mb-1">
-                    <span class="font-bold text-green-700">${USER_1_NAME}</span>
-                    <span class="text-xs text-gray-500 font-medium">${antGoal.label}</span>
-                </div>
-                <div class="progress-bar-track overflow-visible">
-                    <div class="progress-bar-fill-ant" style="width: ${antProgress}%"></div>
-                    <!-- Peer marker (triangle) pointing up from bottom. Ant's bar shows Amy (Purple) -->
-                    <div class="peer-marker bottom" style="left: ${antPeerPos}%; border-bottom-color: #9333ea;" title="${userData.user2.name}"></div>
-                </div>
-                <div class="text-[10px] flex justify-between mt-1 text-gray-500">
-                    <span>${userData.user1.steps.toLocaleString()} steps · ${(userData.user1.steps / 2100).toFixed(1)} mi · ${(userData.user1.steps / 1300).toFixed(1)} km</span>
-                    <span>${(antGoal.steps - userData.user1.steps).toLocaleString()} to go</span>
-                </div>
-                </div>
-            `;
-
-            // Amy Bar with Peer Marker
-            const amyProgress = Math.min(100, (userData.user2.steps / amyGoal.steps) * 100);
-            const amyPeerPos = Math.min(100, (userData.user1.steps / amyGoal.steps) * 100);
-
-            document.getElementById('amy-progress-row').innerHTML = `
-                <div class="card-amy">
-                <div class="flex justify-between items-end mb-1">
-                    <span class="font-bold text-purple-700">${USER_2_NAME}</span>
-                    <span class="text-xs text-gray-500 font-medium">${amyGoal.label}</span>
-                </div>
-                <div class="progress-bar-track overflow-visible">
-                    <div class="progress-bar-fill-amy" style="width: ${amyProgress}%"></div>
-                    <!-- Peer marker (triangle) pointing up from bottom. Amy's bar shows Ant (Green) -->
-                    <div class="peer-marker bottom" style="left: ${amyPeerPos}%; border-bottom-color: #22c55e;" title="${userData.user1.name}"></div>
-                </div>
-                <div class="text-[10px] flex justify-between mt-1 text-gray-500">
-                    <span>${userData.user2.steps.toLocaleString()} steps · ${(userData.user2.steps / 2100).toFixed(1)} mi · ${(userData.user2.steps / 1300).toFixed(1)} km</span>
-                    <span>${(amyGoal.steps - userData.user2.steps).toLocaleString()} to go</span>
-                </div>
-                </div>
-            `;
+            document.getElementById('ant-progress-row').innerHTML = progressCardHtml('user1');
+            document.getElementById('amy-progress-row').innerHTML = progressCardHtml('user2');
         }
 
         let passportExpanded = false;
 
+        // Two passes per person, both replayed from the logs oldest-first:
+        //   allTime[steps][uid]  → the date they first crossed it on the never-resetting total
+        //   annual[steps][uid]   → [{ year, date }] for each challenge year they crossed it again
         function getMilestoneAchievementDates() {
-            // Build cumulative totals per user from logs sorted oldest-first
-            const dates = {};
+            const allTime = {};
+            const annual = {};
+
             ['user1', 'user2'].forEach(uid => {
-                const userLogs = logData.filter(l => l.userId === uid).sort((a, b) => a.date.toMillis() - b.date.toMillis());
-                let cumulative = 0;
-                let milestoneIdx = 0;
-                const sorted = [...MASTER_MILESTONES].sort((a, b) => a.steps - b.steps);
+                const userLogs = logData
+                    .filter(l => l.userId === uid && l.date)
+                    .sort((a, b) => a.date.toMillis() - b.date.toMillis());
+
+                // Pass 1 — all-time, across the full milestone list (including beyond Paphos)
+                let cumulative = 0, idx = 0;
                 userLogs.forEach(log => {
                     cumulative += log.steps;
-                    while (milestoneIdx < sorted.length && cumulative >= sorted[milestoneIdx].steps) {
-                        const key = sorted[milestoneIdx].steps;
-                        if (!dates[key]) dates[key] = {};
-                        dates[key][uid] = log.date.toDate();
-                        milestoneIdx++;
+                    while (idx < ALL_MILESTONES.length && cumulative >= ALL_MILESTONES[idx].steps) {
+                        const key = ALL_MILESTONES[idx].steps;
+                        if (!allTime[key]) allTime[key] = {};
+                        allTime[key][uid] = log.date.toDate();
+                        idx++;
                     }
                 });
+
+                // Pass 2 — one run per challenge year, replaying the annual milestone list
+                const byYear = {};
+                userLogs.forEach(l => {
+                    const y = getChallengeYear(l.date.toDate());
+                    if (y < 1) return;
+                    (byYear[y] = byYear[y] || []).push(l);
+                });
+                Object.keys(byYear).forEach(y => {
+                    let c = 0, i = 0;
+                    byYear[y].forEach(log => {
+                        c += log.steps;
+                        while (i < MASTER_MILESTONES.length && c >= MASTER_MILESTONES[i].steps) {
+                            const key = MASTER_MILESTONES[i].steps;
+                            if (!annual[key]) annual[key] = {};
+                            if (!annual[key][uid]) annual[key][uid] = [];
+                            annual[key][uid].push({ year: Number(y), date: log.date.toDate() });
+                            i++;
+                        }
+                    });
+                });
             });
-            return dates;
+
+            return { allTime, annual };
+        }
+
+        const fmtStampDate = (date) => date
+            ? date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+            : '—';
+
+        // One person's column in the stamp modal: a line per challenge year they earned it,
+        // falling back to the plain all-time date for milestones with no annual history.
+        function stampPersonHtml(uid, m, dates) {
+            const isAnt = uid === 'user1';
+            const name = isAnt ? 'Ant' : 'Amy';
+            const colour = isAnt ? 'green' : 'purple';
+            const has = userData[uid].steps >= m.steps;
+            const peer = isAnt ? 'user2' : 'user1';
+
+            const mine = (dates.annual[m.steps] && dates.annual[m.steps][uid]) || [];
+            const theirs = (dates.annual[m.steps] && dates.annual[m.steps][peer]) || [];
+
+            let lines;
+            if (mine.length) {
+                lines = mine.map(({ year, date }) => {
+                    const rival = theirs.find(t => t.year === year);
+                    const first = !rival || date <= rival.date;
+                    return `<div class="text-xs text-gray-600 whitespace-nowrap">
+                                <span class="text-gray-400">Y${year}</span> ${fmtStampDate(date)}${first ? ` <span class="text-${colour}-600">👑</span>` : ''}
+                            </div>`;
+                }).join('');
+            } else {
+                const d = (dates.allTime[m.steps] || {})[uid];
+                const rivalDate = (dates.allTime[m.steps] || {})[peer];
+                const first = d && (!rivalDate || d <= rivalDate);
+                lines = has
+                    ? `<div class="text-xs text-gray-600 whitespace-nowrap">${fmtStampDate(d)}${first ? ` <span class="text-${colour}-600">👑</span>` : ''}</div>`
+                    : '<div class="text-xs text-gray-300">Not yet</div>';
+            }
+
+            return `<div class="text-center">
+                        <div class="text-sm font-bold ${has ? `text-${colour}-600` : 'text-gray-300'}">${name}</div>
+                        ${lines}
+                    </div>`;
         }
 
         function renderPassport() {
             passportContainer.innerHTML = '';
-            const unlocked = MASTER_MILESTONES.filter(m => userData.user1.steps >= m.steps || userData.user2.steps >= m.steps).sort((a,b)=>b.steps-a.steps);
+            const unlocked = ALL_MILESTONES.filter(m => userData.user1.steps >= m.steps || userData.user2.steps >= m.steps).sort((a,b)=>b.steps-a.steps);
             const wrapper = document.getElementById('passport-wrapper');
             const toggle = document.getElementById('passport-toggle');
             const fade = document.getElementById('passport-fade');
@@ -754,26 +1002,14 @@
                     </div>
                 `;
                 div.addEventListener('click', () => {
-                    const d = milestoneDates[m.steps] || {};
-                    const fmtDate = (date) => date ? date.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'2-digit'}) : '—';
-                    const antDate = d.user1;
-                    const amyDate = d.user2;
                     showModal(m.label, `
                         <div class="text-center py-2">
                             <div class="text-3xl mb-2">${m.label.split(' ').pop()}</div>
                             <p class="text-gray-600 mb-3">${m.description}</p>
                             <p class="text-xs text-gray-400 mb-3">${m.steps.toLocaleString()} steps</p>
-                            <div class="flex justify-center gap-6">
-                                <div class="text-center">
-                                    <div class="text-sm font-bold ${ant?'text-green-600':'text-gray-300'}">Ant</div>
-                                    <div class="text-xs ${ant?'text-gray-600':'text-gray-300'}">${ant ? fmtDate(antDate) : 'Not yet'}</div>
-                                    ${antDate && (!amyDate || antDate <= amyDate) ? '<div class="text-[10px] text-green-600 font-bold mt-1">👑 First</div>' : ''}
-                                </div>
-                                <div class="text-center">
-                                    <div class="text-sm font-bold ${amy?'text-purple-600':'text-gray-300'}">Amy</div>
-                                    <div class="text-xs ${amy?'text-gray-600':'text-gray-300'}">${amy ? fmtDate(amyDate) : 'Not yet'}</div>
-                                    ${amyDate && (!antDate || amyDate <= antDate) ? '<div class="text-[10px] text-purple-600 font-bold mt-1">👑 First</div>' : ''}
-                                </div>
+                            <div class="flex justify-center gap-8">
+                                ${stampPersonHtml('user1', m, milestoneDates)}
+                                ${stampPersonHtml('user2', m, milestoneDates)}
                             </div>
                         </div>`, () => {}, 'Close');
                 });
@@ -872,63 +1108,102 @@
             return userData[userKey].steps / days;
         }
 
+        // Days elapsed in a challenge year, capped at the year's length once it's over.
+        function daysElapsedInChallengeYear(n, countToday) {
+            const start = challengeYearStart(n);
+            const end = challengeYearEnd(n);
+            const now = new Date();
+            const upTo = now < end ? now : new Date(end.getTime() - 86400000);
+            let days = Math.floor((startOfDay(upTo) - start) / 86400000) + 1;
+            if (now < end && !countToday) days -= 1;
+            return Math.max(1, days);
+        }
+
         function calculateAndRenderStats() {
             const filterValue = statsFilter.value;
             const today = new Date();
-            const challengeStart = new Date(2025, 9, 1);
+            const thisYear = currentChallengeYear();
 
             ['user1', 'user2'].forEach(userKey => {
+                if (!userData[userKey]) return;
                 const userLogs = logData.filter(log => log.userId === userKey);
                 const countToday = hasLoggedToday(userKey);
-                let totalSteps = 0;
-                let divisor = 1;
-                let multiplier = 365; 
-                let averageSteps = 0;
+                const isAnt = userKey === 'user1';
+                const colour = isAnt ? 'green' : 'purple';
+                const name = userData[userKey].name;
 
-                if (!userData[userKey]) return;
+                let headlineLabel, headlineValue, subLabel, subValue, predLabel, predValue;
 
                 if (filterValue === 'all') {
-                    totalSteps = userData[userKey].steps;
-                    const diffTime = Math.max(0, today - challengeStart);
-                    divisor = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                    if (!countToday) divisor -= 1; // today isn't logged yet, so don't count it
-                    multiplier = 365;
+                    // Headline is the *year* average — the annual journey is the hero now.
+                    const yearDays = daysElapsedInChallengeYear(thisYear, countToday);
+                    headlineLabel = `${name} Year Avg`;
+                    headlineValue = Math.round(annualSteps[userKey] / yearDays);
+
+                    // All-time average, using the same "don't count today until it's logged" rule.
+                    const allDays = Math.max(1, Math.floor((startOfDay(today) - CHALLENGE_START) / 86400000) + 1 - (countToday ? 0 : 1));
+                    subLabel = 'All-time Avg';
+                    subValue = Math.round(userData[userKey].steps / allDays);
+
+                    predLabel = 'Year Prediction';
+                    predValue = Math.round((annualSteps[userKey] / yearDays) * 365);
+                } else if (filterValue.startsWith('year-')) {
+                    const n = parseInt(filterValue.split('-')[1], 10);
+                    const total = stepsInChallengeYear(userKey, n);
+                    const days = daysElapsedInChallengeYear(n, countToday);
+                    headlineLabel = `${name} · Year ${n} Avg`;
+                    headlineValue = Math.round(total / days);
+                    subLabel = `Year ${n} Total`;
+                    subValue = total;
+                    predLabel = 'Year Prediction';
+                    predValue = Math.round((total / days) * 365);
                 } else {
                     const [yearStr, monthStr] = filterValue.split('-');
-                    const year = parseInt(yearStr);
-                    const month = parseInt(monthStr);
-
-                    const filteredLogs = userLogs.filter(log => {
+                    const year = parseInt(yearStr), month = parseInt(monthStr);
+                    const total = userLogs.reduce((sum, log) => {
                         const d = log.date.toDate();
-                        return d.getFullYear() === year && d.getMonth() === month;
-                    });
-                    totalSteps = filteredLogs.reduce((sum, log) => sum + log.steps, 0);
-
+                        return (d.getFullYear() === year && d.getMonth() === month) ? sum + log.steps : sum;
+                    }, 0);
                     const daysInMonth = new Date(year, month + 1, 0).getDate();
-                    multiplier = daysInMonth;
-
+                    let divisor = daysInMonth;
                     if (year === today.getFullYear() && month === today.getMonth()) {
                         divisor = countToday ? today.getDate() : today.getDate() - 1;
-                    } else {
-                        divisor = daysInMonth;
                     }
+                    divisor = Math.max(1, divisor);
+                    headlineLabel = `${name} Daily Avg`;
+                    headlineValue = Math.round(total / divisor);
+                    subLabel = 'Month Total';
+                    subValue = total;
+                    predLabel = 'Month Prediction';
+                    predValue = Math.round((total / divisor) * daysInMonth);
                 }
-                
-                divisor = Math.max(1, divisor);
-                averageSteps = totalSteps / divisor;
-                const predictedSteps = averageSteps * multiplier;
 
-                const avgTarget = document.getElementById(`${userKey}-avg-steps`);
-                const predTarget = document.getElementById(`${userKey}-predicted-steps`);
-                
-                if (avgTarget) avgTarget.textContent = Math.round(averageSteps).toLocaleString();
-                if (predTarget) predTarget.textContent = Math.round(predictedSteps).toLocaleString();
+                // "vs year 1" — same point in the year, this year against last.
+                let pill = '';
+                if (filterValue === 'all' && thisYear > 1 && ghostSteps[userKey] > 0) {
+                    const diff = ((annualSteps[userKey] - ghostSteps[userKey]) / ghostSteps[userKey]) * 100;
+                    const up = diff >= 0;
+                    pill = `<div class="mt-2">
+                        <span class="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${up ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}"
+                              title="This year so far vs the same point in year ${thisYear - 1}">
+                            ${up ? '↑' : '↓'} ${Math.abs(diff).toFixed(0)}% vs year ${thisYear - 1}
+                        </span>
+                    </div>`;
+                }
 
-                const predLabel = document.getElementById(`${userKey}-pred-label`);
-                if (predLabel) predLabel.textContent = filterValue === 'all' ? 'Year Prediction' : 'Month Prediction';
+                const card = document.getElementById(`${userKey}-stats-card`);
+                if (!card) return;
+                card.innerHTML = `
+                    <p class="text-[10px] uppercase font-bold text-${colour}-700">${headlineLabel}</p>
+                    <p class="text-${colour}-600 font-bold text-xl leading-tight">${headlineValue.toLocaleString()}</p>
+                    <p class="text-[10px] text-gray-400 mt-1">${subLabel} · <span class="text-gray-500 font-semibold">${subValue.toLocaleString()}</span></p>
+                    <p class="text-[10px] text-gray-400">${predLabel} · <span class="text-gray-500 font-semibold">${predValue.toLocaleString()}</span></p>
+                    ${pill}
+                `;
             });
         }
 
+        let heatmapMonthName = '';
         function renderHeatmap() {
             const container = document.getElementById('heatmap-container');
             const filterValue = document.getElementById('stats-filter').value;
@@ -938,6 +1213,17 @@
             if (filterValue === 'all') {
                 year = today.getFullYear();
                 month = today.getMonth();
+            } else if (filterValue.startsWith('year-')) {
+                // The heatmap is a month view, so for a whole-year filter show the current
+                // month if we're inside that year, otherwise the year's final month (Sep).
+                const n = parseInt(filterValue.split('-')[1], 10);
+                if (getChallengeYear(today) === n) {
+                    year = today.getFullYear();
+                    month = today.getMonth();
+                } else {
+                    year = CHALLENGE_START_YEAR + n;
+                    month = 8; // September
+                }
             } else {
                 const parts = filterValue.split('-');
                 year = parseInt(parts[0]);
@@ -1002,19 +1288,22 @@
 
             html += '</div>';
             container.innerHTML = html;
+            heatmapMonthName = monthName;
 
-            // Tap to show step count on mobile
-            const tapInfo = document.getElementById('heatmap-tap-info');
-            container.addEventListener('click', e => {
-                const cell = e.target.closest('.heatmap-cell');
-                if (!cell || !cell.dataset.day) return;
-                const steps = parseInt(cell.dataset.steps);
-                const day = cell.dataset.day;
-                const name = cell.dataset.name;
-                tapInfo.textContent = steps > 0
-                    ? `${name} · ${day} ${monthName} · ${steps.toLocaleString()} steps`
-                    : `${name} · ${day} ${monthName} · No steps`;
-            });
+            // Tap to show step count on mobile. Bound once — the container survives every
+            // re-render, so re-binding here would stack a new listener each time.
+            if (!container.dataset.tapBound) {
+                container.dataset.tapBound = '1';
+                const tapInfo = document.getElementById('heatmap-tap-info');
+                container.addEventListener('click', e => {
+                    const cell = e.target.closest('.heatmap-cell');
+                    if (!cell || !cell.dataset.day) return;
+                    const steps = parseInt(cell.dataset.steps);
+                    tapInfo.textContent = steps > 0
+                        ? `${cell.dataset.name} · ${cell.dataset.day} ${heatmapMonthName} · ${steps.toLocaleString()} steps`
+                        : `${cell.dataset.name} · ${cell.dataset.day} ${heatmapMonthName} · No steps`;
+                });
+            }
         }
 
         function renderRivalry() {
@@ -1042,10 +1331,12 @@
             });
 
             const monthName = today.toLocaleString('default', { month: 'long' });
+            const yr = currentChallengeYear();
             container.innerHTML = `
                 <h3 class="text-sm font-bold text-gray-700 text-center mb-3 mt-4">⚔️ Head to Head</h3>
                 ${rivalryBarHtml('This week (Mon–Sun)', weekAnt, weekAmy)}
                 ${rivalryBarHtml(`This month (${monthName})`, monthAnt, monthAmy)}
+                ${rivalryBarHtml(`This year (Year ${yr})`, annualSteps.user1, annualSteps.user2)}
             `;
         }
 
@@ -1076,6 +1367,119 @@
                     </div>
                 </div>
             `;
+        }
+
+        // --- 🕰️ "A year ago today" ---
+
+        const esc = (s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+        // A log only counts as a memory if there's something to actually look back at.
+        const isMemorable = (l) => !!(l && (l.note || l.photoUrl || l.locationName));
+
+        // Note first, then location, then just the step count.
+        function memoryBlurb(l) {
+            if (l.note) return `"${esc(l.note)}"`;
+            if (l.locationName) return `📍 ${esc(l.locationName)}`;
+            return `${l.steps.toLocaleString()} steps`;
+        }
+
+        // Stable pseudo-random from the date, so the "fair pick" between Ant and Amy
+        // doesn't flip on every re-render — but does change from one day to the next.
+        function dateSeed(d) {
+            const s = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+            let h = 0;
+            for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+            return Math.abs(h);
+        }
+
+        // One entry per previous challenge year: the nearest memorable log to this date,
+        // per person, within a ±2 day window (exact day always wins).
+        function collectMemories() {
+            const today = startOfDay(new Date());
+            const yearsBack = Math.max(0, currentChallengeYear() - 1);
+            const candidates = logData.filter(l => l.date && isMemorable(l));
+            const out = [];
+
+            for (let k = 1; k <= yearsBack; k++) {
+                const target = new Date(today);
+                target.setFullYear(target.getFullYear() - k);
+                const picks = {};
+
+                ['user1', 'user2'].forEach(uid => {
+                    let best = null, bestDist = Infinity;
+                    candidates.forEach(l => {
+                        if (l.userId !== uid) return;
+                        const dist = Math.abs((startOfDay(l.date.toDate()) - target) / 86400000);
+                        if (dist > 2) return;
+                        // Nearest day wins; on a tie, the bigger day wins.
+                        if (dist < bestDist || (dist === bestDist && best && l.steps > best.steps)) {
+                            best = l; bestDist = dist;
+                        }
+                    });
+                    if (best) picks[uid] = best;
+                });
+
+                if (picks.user1 || picks.user2) out.push({ yearsAgo: k, target, picks });
+            }
+            return out;
+        }
+
+        function memoryCardHtml(log) {
+            const isAnt = log.userId === 'user1';
+            const d = log.date.toDate();
+            return `
+                <div class="text-left border rounded-lg p-3 mb-3 last:mb-0 ${isAnt ? 'card-ant' : 'card-amy'}">
+                    <div class="flex justify-between items-baseline mb-1">
+                        <span class="font-bold text-sm ${isAnt ? 'text-green-700' : 'text-purple-700'}">${esc(userData[log.userId].name)}</span>
+                        <span class="text-[10px] text-gray-400">${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                    ${log.photoUrl ? `<img src="${esc(log.photoUrl)}" alt="" class="w-full rounded-md mb-2" />` : ''}
+                    ${log.note ? `<p class="text-sm text-gray-700 italic mb-1">"${esc(log.note)}"</p>` : ''}
+                    ${log.locationName ? `<p class="text-xs text-gray-500 mb-1">📍 ${esc(log.locationName)}</p>` : ''}
+                    <p class="text-xs font-semibold ${isAnt ? 'text-green-600' : 'text-purple-600'}">${log.steps.toLocaleString()} steps</p>
+                </div>`;
+        }
+
+        function renderMemories() {
+            const strip = document.getElementById('memories-strip');
+            if (!strip) return;
+            const memories = collectMemories();
+
+            if (!memories.length) {
+                strip.classList.add('hidden');
+                strip.innerHTML = '';
+                return;
+            }
+
+            // The strip teases the most recent year; the modal shows everything.
+            const latest = memories[0];
+            const both = latest.picks.user1 && latest.picks.user2;
+            const seedPick = dateSeed(new Date()) % 2 === 0 ? 'user1' : 'user2';
+            const shownUid = both ? seedPick : (latest.picks.user1 ? 'user1' : 'user2');
+            const shown = latest.picks[shownUid];
+
+            const yearsLabel = latest.yearsAgo === 1 ? 'A year ago today' : `${latest.yearsAgo} years ago today`;
+            const anyPhoto = Object.values(latest.picks).some(l => l.photoUrl);
+
+            strip.classList.remove('hidden');
+            strip.innerHTML = `
+                <div class="memory-strip">
+                    <span class="text-sm">${anyPhoto ? '📷' : '🕰️'}</span>
+                    <span class="memory-text"><span class="font-semibold not-italic">${yearsLabel}</span> · ${esc(userData[shownUid].name)}: ${memoryBlurb(shown)}</span>
+                    <span class="text-[#b08d57] text-sm">›</span>
+                </div>`;
+
+            strip.querySelector('.memory-strip').addEventListener('click', () => {
+                const body = memories.map(mem => {
+                    const cards = ['user1', 'user2'].filter(u => mem.picks[u]).map(u => memoryCardHtml(mem.picks[u])).join('');
+                    const heading = memories.length > 1
+                        ? `<p class="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">${mem.target.getFullYear()}</p>`
+                        : '';
+                    return heading + cards;
+                }).join('');
+                showModal(yearsLabel, `<div class="max-h-[60vh] overflow-y-auto">${body}</div>`, () => {}, 'Close');
+            });
         }
 
         function renderMap() {
@@ -1185,7 +1589,8 @@
         function renderStretch() {
             const div = document.getElementById('stretch-goals-container');
             div.innerHTML = '';
-            const end = new Date('2026-10-01');
+            // End of the *current* challenge year, so this keeps working after 1 Oct 2026.
+            const end = challengeYearEnd(currentChallengeYear());
             const daysLeft = Math.max(1, Math.ceil((end - new Date())/86400000));
             
             SHARED_STRETCH.forEach(g => {
@@ -1442,6 +1847,16 @@
             const now = new Date();
             const filter = document.getElementById('stats-filter');
             let html = '<option value="all">All Time</option>';
+
+            // Challenge years first — they're the meaningful unit now.
+            const thisYear = currentChallengeYear();
+            html += '<optgroup label="Challenge Years">';
+            for (let n = 1; n <= thisYear; n++) {
+                const s = challengeYearStart(n), e = challengeYearEnd(n);
+                html += `<option value="year-${n}">Year ${n} (Oct ${String(s.getFullYear()).slice(2)}–Sep ${String(e.getFullYear()).slice(2)})</option>`;
+            }
+            html += '</optgroup>';
+
             let current = new Date(start);
             let currentYear = -1;
             while (current <= now || (current.getMonth() === now.getMonth() && current.getFullYear() === now.getFullYear())) {
@@ -1510,7 +1925,11 @@
             if (isNaN(steps) || steps <= 0) return;
             
             const oldSteps = userData[currentUser].steps;
-            
+            // Snapshot the annual total too — a backdated log only moves it if the date
+            // actually falls inside the current challenge year.
+            const oldAnnual = annualSteps[currentUser];
+            const countsThisYear = getChallengeYear(selectedDate) === currentChallengeYear();
+
             stepInput.disabled = true;
             try {
                 await runTransaction(db, async (t) => {
@@ -1523,21 +1942,42 @@
                 });
                 stepForm.reset();
                 
-                // Check if any milestones were crossed
+                // Celebrations fire on *crossing*, checked here rather than on render —
+                // so nothing can be missed depending on what happens to be on screen.
                 const newSteps = oldSteps + steps;
-                const crossed = MASTER_MILESTONES.filter(m => oldSteps < m.steps && newSteps >= m.steps);
-                if (crossed.length > 0) {
-                    const best = crossed[crossed.length - 1];
+                const newAnnual = oldAnnual + (countsThisYear ? steps : 0);
+
+                const crossedAllTime = ALL_MILESTONES.filter(m => oldSteps < m.steps && newSteps >= m.steps);
+                const crossedAnnual = countsThisYear
+                    ? MASTER_MILESTONES.filter(m => oldAnnual < m.steps && newAnnual >= m.steps)
+                    : [];
+
+                if (crossedAllTime.length || crossedAnnual.length) {
                     confetti({ particleCount: 200, spread: 120, origin: { y: 0.6 }, colors: currentUser === 'user1' ? ['#4ade80','#22c55e','#16a34a'] : ['#a855f7','#9333ea','#7e22ce'] });
                     setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { y: 0.7, x: 0.3 } }), 300);
                     setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { y: 0.7, x: 0.7 } }), 600);
-                    showModal('🎉 Milestone Reached!', `
+
+                    const yr = currentChallengeYear();
+                    const block = (m, caption) => `
                         <div class="text-center py-2">
-                            <div class="text-4xl mb-3">${best.label.split(' ').pop()}</div>
-                            <div class="text-lg font-bold mb-1">${best.label}</div>
-                            <p class="text-gray-600 mb-2">${best.description}</p>
-                            <p class="text-sm text-gray-400">${newSteps.toLocaleString()} total steps</p>
-                        </div>`, () => {}, 'Nice! 🎉');
+                            <div class="text-4xl mb-3">${m.label.split(' ').pop()}</div>
+                            <div class="text-lg font-bold mb-1">${m.label}</div>
+                            <p class="text-gray-600 mb-2">${m.description}</p>
+                            <p class="text-sm text-gray-400">${caption}</p>
+                        </div>`;
+
+                    let content = '';
+                    if (crossedAnnual.length) {
+                        const best = crossedAnnual[crossedAnnual.length - 1];
+                        content += block(best, `${newAnnual.toLocaleString()} steps this year · Year ${yr}`);
+                    }
+                    if (crossedAllTime.length) {
+                        const best = crossedAllTime[crossedAllTime.length - 1];
+                        if (content) content += '<hr class="my-2 border-gray-200"><p class="text-center text-[10px] uppercase font-bold text-gray-400 mb-1">And on the all-time journey…</p>';
+                        content += block(best, `${newSteps.toLocaleString()} steps all time`);
+                    }
+
+                    showModal('🎉 Milestone Reached!', content, () => {}, 'Nice! 🎉');
                 }
 
                 // Reset date to today after logging
@@ -1550,7 +1990,9 @@
         // Move updateUI definition before main calls it
         function updateUI() {
             if (!userData.user1 || !userData.user2) return;
+            recomputeYearTotals(); // everything annual derives from this
             renderBars();
+            renderMemories();
             renderPassport();
             renderLogs();
             calculateAndRenderStats();
@@ -1655,6 +2097,8 @@
             } catch (e) { console.error("Authentication failed", e); }
             
             await initializeUserDocs();
+            const sub = document.getElementById('header-subtitle');
+            if (sub) sub.textContent = `Year ${currentChallengeYear()} · Est. Oct 25`;
             initializeMap();
             setupUserSelector();
             setupStatsFilter();
@@ -1673,8 +2117,30 @@
             onSnapshot(logsQuery, (snapshot) => {
                 logData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 updateUI();
+                auditStepTotals();
             });
         }
+
+        // --- 🔍 Data audit ---
+        // Everything annual is derived from the logs, while the all-time bar still uses the
+        // stored `steps` field. If those two ever disagree the two journeys drift apart, so
+        // shout about it in the console. Run window.stepAudit() any time for the detail.
+        let auditWarned = false;
+        function auditStepTotals() {
+            const report = ['user1', 'user2'].map(uid => {
+                const fromLogs = logData.reduce((t, l) => l.userId === uid ? t + l.steps : t, 0);
+                const stored = (userData[uid] && userData[uid].steps) || 0;
+                return { user: (userData[uid] && userData[uid].name) || uid, stored, fromLogs, diff: stored - fromLogs };
+            });
+            const bad = report.filter(r => r.diff !== 0);
+            if (bad.length && !auditWarned) {
+                auditWarned = true;
+                console.warn('[A-to-A] Stored step totals do not match the sum of the logs:', report,
+                             '\nAnnual figures come from the logs; the all-time bar uses the stored total.');
+            }
+            return report;
+        }
+        window.stepAudit = () => { console.table(auditStepTotals()); };
 
         main();
 
