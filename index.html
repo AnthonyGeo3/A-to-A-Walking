@@ -171,6 +171,7 @@
             border-radius: 50%;
             border: 3px double #8b7355; /* Ink color */
             background: rgba(255, 255, 255, 0.7); /* Slightly opaque to standout on paper */
+            position: relative; /* anchors the repeat-year stars */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -187,6 +188,25 @@
             background: white;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
+        /* One star per challenge year you've reached this place *again* on the annual
+           journey. Ant down the left edge, Amy down the right. */
+        .stamp-stars {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px;
+            font-size: 7px;
+            line-height: 1;
+            pointer-events: none;
+            text-shadow: 0 0 2px rgba(255,255,255,0.9);
+        }
+        .stamp-stars.left  { left: 4px;  color: #16a34a; }
+        .stamp-stars.right { right: 4px; color: #7e22ce; }
+        .stamp-star-count { font-size: 6px; font-weight: 700; }
+
         .stamp:nth-child(3n+1) { transform: rotate(-4deg); }
         .stamp:nth-child(3n+2) { transform: rotate(3deg); }
         .stamp:nth-child(3n+3) { transform: rotate(-2deg); }
@@ -1020,6 +1040,27 @@
             return { allTime, annual };
         }
 
+        // How many times has this person reached this place *again*? The all-time unlock
+        // is the stamp itself, so only annual crossings dated after that unlock count —
+        // which means year 1 never earns a star (it *is* the unlock), and every later
+        // year you walk back to the same place does.
+        function annualRepeatCount(uid, m, dates) {
+            const unlocked = (dates.allTime[m.steps] || {})[uid];
+            if (!unlocked) return 0;
+            const runs = (dates.annual[m.steps] || {})[uid] || [];
+            return runs.filter(r => r.date > unlocked).length;
+        }
+
+        // Up to four stars stacked down the edge; beyond that it'd just be a smudge,
+        // so switch to a star with the count next to it.
+        function starsHtml(n, side) {
+            if (!n) return '';
+            const inner = n <= 4
+                ? Array.from({ length: n }, () => '<span>★</span>').join('')
+                : `<span>★</span><span class="stamp-star-count">${n}</span>`;
+            return `<div class="stamp-stars ${side}">${inner}</div>`;
+        }
+
         const fmtStampDate = (date) => date
             ? date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
             : '—';
@@ -1079,11 +1120,20 @@
             unlocked.forEach(m => {
                 const ant = userData.user1.steps >= m.steps;
                 const amy = userData.user2.steps >= m.steps;
+                const antStars = annualRepeatCount('user1', m, milestoneDates);
+                const amyStars = annualRepeatCount('user2', m, milestoneDates);
+
                 const div = document.createElement('div');
                 div.className = 'stamp cursor-pointer';
                 div.dataset.steps = m.steps;
+                const tips = [];
+                if (antStars) tips.push(`Ant has been back ${antStars === 1 ? 'once' : antStars + ' times'}`);
+                if (amyStars) tips.push(`Amy has been back ${amyStars === 1 ? 'once' : amyStars + ' times'}`);
+                if (tips.length) div.title = tips.join(' · ');
                 div.innerHTML = `
-                    <p class="text-[10px] font-bold leading-tight px-1 mb-1 text-gray-800">${m.label}</p>
+                    ${starsHtml(antStars, 'left')}
+                    ${starsHtml(amyStars, 'right')}
+                    <p class="text-[10px] font-bold leading-tight px-2 mb-1 text-gray-800">${m.label}</p>
                     <div class="flex gap-2">
                         <span class="text-xs font-black ${ant?'text-green-600':'text-gray-300'}">A</span>
                         <span class="text-xs font-black ${amy?'text-purple-600':'text-gray-300'}">A</span>
