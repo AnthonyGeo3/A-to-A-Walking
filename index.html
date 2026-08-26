@@ -2281,37 +2281,191 @@
         }
 
         // --- 🔍 Data audit ---
-        // Every figure on screen — annual *and* all-time — is derived from the logs, so the
-        // two journeys can no longer disagree. The stored `steps` field on the user doc is
-        // kept up to date alongside them, but a write that never landed (or an entry added
-        // straight into Firestore) can still leave it adrift. That no longer changes what
-        // anyone sees, but shout about it in the console anyway.
-        // Run window.stepAudit() any time for the detail, or window.stepRepair() to write
-        // the logs' total back over the stored field.
+        // Two numbers live in Firestore: the `challengeLogs` collection (every entry ever
+        // added) and a `steps` counter on each user doc. The logs are the real record —
+        // everything on screen is summed from them. The counter is just a running tally
+        // kept in step by hand on each add and delete, and it has no history, so nothing
+        // can prove *when* it drifted. What we can do is check the logs for anything that
+        // would explain the size of the gap: a walk logged twice, an entry added straight
+        // into the Firestore console, an entry with no date.
+        //
+        //   window.stepAudit()   → the full reconciliation, printed
+        //   window.stepRepair()  → write the logs' total back over the counter
+
+        const auditDayKey = (l) => {
+            if (!l.date) return null;
+            const d = l.date.toDate();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+        const auditDate = (l) => l.date
+            ? l.date.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+            : 'no date';
+
+        // Reconcile one person's logs against their stored counter, and hunt through the
+        // logs for anything that accounts for the difference.
+        function reconcileSteps(uid) {
+            const name = (userData[uid] && userData[uid].name) || uid;
+            const logs = logData.filter(l => l.userId === uid);
+            const fromLogs = logs.reduce((t, l) => t + (Number(l.steps) || 0), 0);
+            const stored = (userData[uid] && userData[uid].steps) || 0;
+            const diff = stored - fromLogs; // negative → the logs hold steps the counter never got
+
+            // Same person, same day, same step count: almost always one walk logged twice.
+            const groups = {};
+            logs.forEach(l => {
+                const day = auditDayKey(l);
+                if (day === null) return;
+                const k = day + '|' + l.steps;
+                (groups[k] = groups[k] || []).push(l);
+            });
+            const duplicates = Object.values(groups)
+                .filter(g => g.length > 1)
+                .map(g => ({
+                    date: auditDate(g[0]), steps: g[0].steps, copies: g.length,
+                    extra: (g.length - 1) * g[0].steps, ids: g.map(l => l.id).join(', ')
+                }))
+                .sort((a, b) => b.extra - a.extra);
+
+            // Two entries on one day with *different* counts is perfectly normal (a morning
+            // and an evening walk), but worth eyeballing when a total looks wrong.
+            const sameDay = Object.values(
+                logs.reduce((acc, l) => {
+                    const day = auditDayKey(l);
+                    if (day === null) return acc;
+                    (acc[day] = acc[day] || []).push(l);
+                    return acc;
+                }, {})
+            ).filter(g => g.length > 1 && new Set(g.map(l => l.steps)).size > 1)
+             .map(g => ({ date: auditDate(g[0]), entries: g.length, steps: g.map(l => l.steps).join(' + '), total: g.reduce((t, l) => t + l.steps, 0) }));
+
+            const undated  = logs.filter(l => !l.date);
+            const oddSteps = logs.filter(l => !Number.isFinite(l.steps) || l.steps <= 0 || Math.floor(l.steps) !== l.steps);
+            const outside  = logs.filter(l => {
+                if (!l.date) return false;
+                const d = l.date.toDate();
+                return d < CHALLENGE_START || d > new Date();
+            });
+
+            // The counter is short by `gap`. What in the logs is exactly that size?
+            const gap = -diff;
+            const suspects = [];
+            if (gap > 0) {
+                // Anything already explained as a duplicate shouldn't be listed again on
+                // its own further down.
+                const claimed = new Set();
+                duplicates.forEach(g => {
+                    if (g.extra !== gap) return;
+                    suspects.push(`The ${g.copies} identical entries of ${g.steps.toLocaleString()} on ${g.date} — the extra ${g.copies > 2 ? 'copies come' : 'copy comes'} to ${g.extra.toLocaleString()}, exactly the gap. (ids: ${g.ids})`);
+                    g.ids.split(', ').forEach(id => claimed.add(id));
+                });
+                const dupTotal = duplicates.reduce((t, g) => t + g.extra, 0);
+                if (duplicates.length > 1 && dupTotal === gap) {
+                    suspects.push(`All ${duplicates.length} duplicate groups together come to ${dupTotal.toLocaleString()} — exactly the gap.`);
+                    duplicates.forEach(g => g.ids.split(', ').forEach(id => claimed.add(id)));
+                }
+                logs.filter(l => l.steps === gap && !claimed.has(l.id)).forEach(l => {
+                    suspects.push(l.date
+                        ? `A single entry of ${gap.toLocaleString()} on ${auditDate(l)} matches the gap exactly — most likely added without the counter being updated. (id: ${l.id})`
+                        : `A single undated entry of ${gap.toLocaleString()} matches the gap exactly. (id: ${l.id})`);
+                });
+            }
+
+            return { uid, name, count: logs.length, fromLogs, stored, diff, gap,
+                     duplicates, sameDay, undated, oddSteps, outside, suspects };
+        }
+
+        // Kept for the automatic on-load check — the short version.
         let auditWarned = false;
         function auditStepTotals() {
             const report = ['user1', 'user2'].map(uid => {
-                const fromLogs = logData.reduce((t, l) => l.userId === uid ? t + l.steps : t, 0);
-                const stored = (userData[uid] && userData[uid].steps) || 0;
-                return { user: (userData[uid] && userData[uid].name) || uid, uid, stored, fromLogs, diff: stored - fromLogs };
+                const r = reconcileSteps(uid);
+                return { user: r.name, uid: r.uid, stored: r.stored, fromLogs: r.fromLogs, diff: r.diff };
             });
             const bad = report.filter(r => r.diff !== 0);
             if (bad.length && !auditWarned) {
                 auditWarned = true;
-                console.warn('[A-to-A] Stored step totals do not match the sum of the logs:', report,
-                             '\nDisplayed figures all come from the logs. Run window.stepRepair() to reconcile the stored field.');
+                console.warn('[A-to-A] The stored counter does not match the sum of the logs:', report,
+                             '\nEverything on screen comes from the logs. Run window.stepAudit() for the breakdown.');
             }
             return report;
         }
-        window.stepAudit = () => { console.table(auditStepTotals()); };
-        // Manual, deliberate reconciliation — the logs are the source of truth, so this just
-        // stamps their total onto the stored field.
+
+        window.stepAudit = () => {
+            const out = [];
+            const say = (line) => out.push(line);
+            say('');
+            say('A-to-A · steps reconciliation');
+            say('The logs are the record. The counter is a tally kept alongside them.');
+
+            ['user1', 'user2'].forEach(uid => {
+                const r = reconcileSteps(uid);
+                say('');
+                say('────────────────────────────────────────────────');
+                say(`${r.name}`);
+                say(`  Entries in the log      ${r.count.toLocaleString()}`);
+                say(`  Sum of those entries    ${r.fromLogs.toLocaleString()}   ← what the app shows`);
+                say(`  Stored counter          ${r.stored.toLocaleString()}`);
+
+                if (r.diff === 0) {
+                    say('  ✅ These match.');
+                } else if (r.diff < 0) {
+                    say(`  ⚠️  Gap: ${r.gap.toLocaleString()} steps are in the logs but never reached the counter.`);
+                    say('      (Nothing is missing from Firestore — the logs ARE the Firestore record.');
+                    say('       The counter simply missed some increments.)');
+                } else {
+                    say(`  ⚠️  Gap: the counter is ${r.diff.toLocaleString()} steps AHEAD of the logs.`);
+                    say('      That direction means entries were removed without the counter coming down —');
+                    say('      usually a delete done straight in the Firestore console.');
+                }
+
+                if (r.suspects.length) {
+                    say('');
+                    say('  What accounts for it:');
+                    r.suspects.forEach(x => say(`   • ${x}`));
+                } else if (r.diff !== 0) {
+                    say('');
+                    say('  Nothing in the logs matches the gap exactly, so it is likely several');
+                    say('  missed increments rather than one event. The counter keeps no history,');
+                    say('  so it cannot be pinned down further.');
+                }
+
+                const notes = [];
+                if (r.duplicates.length) notes.push(`${r.duplicates.length} duplicate group(s) — same day, same step count`);
+                if (r.sameDay.length)    notes.push(`${r.sameDay.length} day(s) with several different entries (normal, but worth a look)`);
+                if (r.undated.length)    notes.push(`${r.undated.length} entr(y/ies) with no date`);
+                if (r.oddSteps.length)   notes.push(`${r.oddSteps.length} entr(y/ies) with a zero, negative or fractional step count`);
+                if (r.outside.length)    notes.push(`${r.outside.length} entr(y/ies) dated before the challenge started or in the future`);
+                say('');
+                say(notes.length ? '  Worth checking:' : '  No duplicates, undated entries or odd step counts found.');
+                notes.forEach(n => say(`   • ${n}`));
+            });
+
+            say('');
+            say('Run window.stepRepair() to write the logs\' total over the counter.');
+            say('');
+            console.log(out.join('\n'));
+
+            // Tables for anything found, so rows can be clicked into and inspected.
+            ['user1', 'user2'].forEach(uid => {
+                const r = reconcileSteps(uid);
+                if (r.duplicates.length) { console.log(`${r.name} — duplicate entries (same day, same count):`); console.table(r.duplicates); }
+                if (r.sameDay.length)    { console.log(`${r.name} — days with several entries:`); console.table(r.sameDay); }
+                if (r.undated.length)    { console.log(`${r.name} — entries with no date:`); console.table(r.undated.map(l => ({ id: l.id, steps: l.steps, note: l.note || '' }))); }
+                if (r.oddSteps.length)   { console.log(`${r.name} — odd step counts:`); console.table(r.oddSteps.map(l => ({ id: l.id, date: auditDate(l), steps: l.steps }))); }
+                if (r.outside.length)    { console.log(`${r.name} — dated outside the challenge:`); console.table(r.outside.map(l => ({ id: l.id, date: auditDate(l), steps: l.steps }))); }
+            });
+
+            return ['user1', 'user2'].map(reconcileSteps);
+        };
+
+        // Manual, deliberate reconciliation — the logs are the source of truth, so this
+        // just stamps their total onto the counter.
         window.stepRepair = async () => {
             const report = auditStepTotals().filter(r => r.diff !== 0);
-            if (!report.length) { console.log('[A-to-A] Stored totals already match the logs — nothing to do.'); return; }
+            if (!report.length) { console.log('[A-to-A] The counter already matches the logs — nothing to do.'); return; }
             for (const r of report) {
                 await updateDoc(r.uid === 'user1' ? user1DocRef : user2DocRef, { steps: r.fromLogs });
-                console.log(`[A-to-A] ${r.user}: stored total ${r.stored.toLocaleString()} → ${r.fromLogs.toLocaleString()}`);
+                console.log(`[A-to-A] ${r.user}: counter ${r.stored.toLocaleString()} → ${r.fromLogs.toLocaleString()}`);
             }
         };
 
