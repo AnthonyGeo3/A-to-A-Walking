@@ -758,6 +758,9 @@
         // day of the *previous* challenge year (the "ghost" — you vs. you).
         let annualSteps = { user1: 0, user2: 0 };
         let ghostSteps  = { user1: 0, user2: 0 };
+        // The never-resetting cumulative total, summed straight from the logs — the same
+        // source the annual figures come from, so the two journeys can't drift apart.
+        let allTimeSteps = { user1: 0, user2: 0 };
 
         function recomputeYearTotals() {
             const yr = currentChallengeYear();
@@ -772,12 +775,24 @@
 
             annualSteps = { user1: 0, user2: 0 };
             ghostSteps  = { user1: 0, user2: 0 };
+            allTimeSteps = { user1: 0, user2: 0 };
             logData.forEach(l => {
-                if (!l.date || !(l.userId in annualSteps)) return;
+                if (!(l.userId in annualSteps)) return;
+                // Every log counts towards the all-time total, dated or not.
+                allTimeSteps[l.userId] += l.steps || 0;
+                if (!l.date) return;
                 const d = l.date.toDate();
                 if (d >= yrStart && d < yrEnd) annualSteps[l.userId] += l.steps;
                 else if (yr > 1 && d >= prevStart && d < prevCutoff) ghostSteps[l.userId] += l.steps;
             });
+        }
+
+        // The all-time figure every view should use. The stored `steps` field on the user
+        // doc is only a fallback for the split second before the logs snapshot lands, so
+        // the bars don't flash zero on load.
+        function totalSteps(uid) {
+            if (logData.length) return allTimeSteps[uid] || 0;
+            return (userData[uid] && userData[uid].steps) || 0;
         }
 
         // Sum of a user's logs inside a given challenge year (used by stats + passport).
@@ -943,10 +958,10 @@
             const ghost    = ghostSteps[uid];
             const ghostPct = Math.min(100, (ghost / goal.steps) * 100);
 
-            const total     = userData[uid].steps;
+            const total     = totalSteps(uid);
             const atGoal    = getNextAllTimeGoal(total);
             const atPct     = Math.min(100, (total / atGoal.steps) * 100);
-            const atPeerPct = Math.min(100, (userData[peer].steps / atGoal.steps) * 100);
+            const atPeerPct = Math.min(100, (totalSteps(peer) / atGoal.steps) * 100);
 
             const ownColour  = isAnt ? '#22c55e' : '#9333ea';
             const peerColour = isAnt ? '#9333ea' : '#22c55e';
@@ -1071,7 +1086,7 @@
             const isAnt = uid === 'user1';
             const name = isAnt ? 'Ant' : 'Amy';
             const colour = isAnt ? 'green' : 'purple';
-            const has = userData[uid].steps >= m.steps;
+            const has = totalSteps(uid) >= m.steps;
             const peer = isAnt ? 'user2' : 'user1';
 
             const mine = (dates.annual[m.steps] && dates.annual[m.steps][uid]) || [];
@@ -1103,7 +1118,7 @@
 
         function renderPassport() {
             passportContainer.innerHTML = '';
-            const unlocked = ALL_MILESTONES.filter(m => userData.user1.steps >= m.steps || userData.user2.steps >= m.steps).sort((a,b)=>b.steps-a.steps);
+            const unlocked = ALL_MILESTONES.filter(m => totalSteps('user1') >= m.steps || totalSteps('user2') >= m.steps).sort((a,b)=>b.steps-a.steps);
             const wrapper = document.getElementById('passport-wrapper');
             const toggle = document.getElementById('passport-toggle');
             const fade = document.getElementById('passport-fade');
@@ -1118,8 +1133,8 @@
             const milestoneDates = getMilestoneAchievementDates();
 
             unlocked.forEach(m => {
-                const ant = userData.user1.steps >= m.steps;
-                const amy = userData.user2.steps >= m.steps;
+                const ant = totalSteps('user1') >= m.steps;
+                const amy = totalSteps('user2') >= m.steps;
                 const antStars = annualRepeatCount('user1', m, milestoneDates);
                 const amyStars = annualRepeatCount('user2', m, milestoneDates);
 
@@ -1243,7 +1258,7 @@
             let days = Math.floor(Math.max(0, new Date() - challengeStart) / 86400000) + 1;
             if (!hasLoggedToday(userKey)) days -= 1;
             days = Math.max(1, days);
-            return userData[userKey].steps / days;
+            return totalSteps(userKey) / days;
         }
 
         // Days elapsed in a challenge year, capped at the year's length once it's over.
@@ -1281,7 +1296,7 @@
                     // All-time average, using the same "don't count today until it's logged" rule.
                     const allDays = Math.max(1, Math.floor((startOfDay(today) - CHALLENGE_START) / 86400000) + 1 - (countToday ? 0 : 1));
                     subLabel = 'All-time Avg';
-                    subValue = Math.round(userData[userKey].steps / allDays);
+                    subValue = Math.round(totalSteps(userKey) / allDays);
 
                     predLabel = 'Year Prediction';
                     predValue = Math.round((annualSteps[userKey] / yearDays) * 365);
@@ -1720,7 +1735,7 @@
         // "X days to go" at the current daily average, plus the date that lands on.
         function daysToGoalText(uid, g) {
             const avg = getDailyAverage(uid);
-            const remaining = Math.max(0, g.steps - userData[uid].steps);
+            const remaining = Math.max(0, g.steps - totalSteps(uid));
             if (avg <= 0) return 'Log some steps to see an ETA';
             const days = Math.ceil(remaining / avg);
             if (days > 3650) return 'Over 10 years at this pace 😅';
@@ -1738,8 +1753,8 @@
             const daysLeft = Math.max(1, Math.ceil((end - new Date())/86400000));
             
             SHARED_STRETCH.forEach(g => {
-                const done = userData.user1.steps >= g.steps && userData.user2.steps >= g.steps;
-                const rem1 = Math.max(0, g.steps - userData.user1.steps), rem2 = Math.max(0, g.steps - userData.user2.steps);
+                const done = totalSteps('user1') >= g.steps && totalSteps('user2') >= g.steps;
+                const rem1 = Math.max(0, g.steps - totalSteps('user1')), rem2 = Math.max(0, g.steps - totalSteps('user2'));
                 div.innerHTML += `<div class="bg-white p-3 rounded border-l-4 ${done?'border-amber-400 bg-amber-50':'border-gray-200'} shadow-sm flex justify-between">
                     <div><div class="font-bold text-sm">${g.label}</div><div class="text-xs text-gray-500">${g.steps.toLocaleString()} each</div>
                     ${!done ? `<div class="text-[10px] mt-1">Daily: <span class="text-green-600">${Math.ceil(rem1/daysLeft)}</span> | <span class="text-purple-600">${Math.ceil(rem2/daysLeft)}</span></div>` : ''}
@@ -1747,8 +1762,8 @@
             });
             ['user1','user2'].forEach(uid => {
                 const g = getStretch(uid);
-                const done = userData[uid].steps >= g.steps;
-                const rem = Math.max(0, g.steps - userData[uid].steps);
+                const done = totalSteps(uid) >= g.steps;
+                const rem = Math.max(0, g.steps - totalSteps(uid));
                 const editing = stretchEditing === uid;
                 const f = editing && stretchDraft ? stretchDraft : g;
                 div.innerHTML += `<div class="bg-white p-3 rounded border-l-4 ${done?'border-amber-400 bg-amber-50':'border-gray-200'} shadow-sm">
@@ -2068,7 +2083,7 @@
             const steps = parseInt(stepInput.value, 10);
             if (isNaN(steps) || steps <= 0) return;
             
-            const oldSteps = userData[currentUser].steps;
+            const oldSteps = totalSteps(currentUser);
             // Snapshot the annual total too — a backdated log only moves it if the date
             // actually falls inside the current challenge year.
             const oldAnnual = annualSteps[currentUser];
@@ -2266,25 +2281,39 @@
         }
 
         // --- 🔍 Data audit ---
-        // Everything annual is derived from the logs, while the all-time bar still uses the
-        // stored `steps` field. If those two ever disagree the two journeys drift apart, so
-        // shout about it in the console. Run window.stepAudit() any time for the detail.
+        // Every figure on screen — annual *and* all-time — is derived from the logs, so the
+        // two journeys can no longer disagree. The stored `steps` field on the user doc is
+        // kept up to date alongside them, but a write that never landed (or an entry added
+        // straight into Firestore) can still leave it adrift. That no longer changes what
+        // anyone sees, but shout about it in the console anyway.
+        // Run window.stepAudit() any time for the detail, or window.stepRepair() to write
+        // the logs' total back over the stored field.
         let auditWarned = false;
         function auditStepTotals() {
             const report = ['user1', 'user2'].map(uid => {
                 const fromLogs = logData.reduce((t, l) => l.userId === uid ? t + l.steps : t, 0);
                 const stored = (userData[uid] && userData[uid].steps) || 0;
-                return { user: (userData[uid] && userData[uid].name) || uid, stored, fromLogs, diff: stored - fromLogs };
+                return { user: (userData[uid] && userData[uid].name) || uid, uid, stored, fromLogs, diff: stored - fromLogs };
             });
             const bad = report.filter(r => r.diff !== 0);
             if (bad.length && !auditWarned) {
                 auditWarned = true;
                 console.warn('[A-to-A] Stored step totals do not match the sum of the logs:', report,
-                             '\nAnnual figures come from the logs; the all-time bar uses the stored total.');
+                             '\nDisplayed figures all come from the logs. Run window.stepRepair() to reconcile the stored field.');
             }
             return report;
         }
         window.stepAudit = () => { console.table(auditStepTotals()); };
+        // Manual, deliberate reconciliation — the logs are the source of truth, so this just
+        // stamps their total onto the stored field.
+        window.stepRepair = async () => {
+            const report = auditStepTotals().filter(r => r.diff !== 0);
+            if (!report.length) { console.log('[A-to-A] Stored totals already match the logs — nothing to do.'); return; }
+            for (const r of report) {
+                await updateDoc(r.uid === 'user1' ? user1DocRef : user2DocRef, { steps: r.fromLogs });
+                console.log(`[A-to-A] ${r.user}: stored total ${r.stored.toLocaleString()} → ${r.fromLogs.toLocaleString()}`);
+            }
+        };
 
         main();
 
