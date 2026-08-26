@@ -1732,6 +1732,39 @@
             });
         }
 
+        // A stretch goal's optional deadline, stored as a plain 'YYYY-MM-DD' string.
+        // Parsed by hand rather than with `new Date(str)`, which reads a bare date as UTC
+        // midnight and so lands on the day before once it's shown west of Greenwich.
+        function parseTargetDate(str) {
+            if (typeof str !== 'string') return null;
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str.trim());
+            if (!m) return null;
+            const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        // "By 30 Sep 2026 · 12,345 a day needed" — the second line on a goal that has a
+        // deadline set. Empty string when it hasn't, so the card looks exactly as before.
+        // Today counts as a day you can still walk in, unless it's already logged — the
+        // same rule the stats panel uses, and the one that keeps this honest against a
+        // remaining total that already includes today.
+        function targetDateText(uid, g) {
+            const target = parseTargetDate(g.targetDate);
+            if (!target) return '';
+            const dateStr = target.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            const today = startOfDay(new Date());
+            if (target < today) return `By ${dateStr} &middot; that date has passed`;
+
+            let days = Math.floor((target - today) / 86400000) + 1;
+            if (hasLoggedToday(uid)) days -= 1;
+            if (days < 1) return `By ${dateStr} &middot; due today`;
+
+            const remaining = Math.max(0, g.steps - totalSteps(uid));
+            if (remaining === 0) return `By ${dateStr} &middot; already there`;
+            const perDay = Math.ceil(remaining / days);
+            return `By ${dateStr} &middot; ${perDay.toLocaleString()} a day needed`;
+        }
+
         // "X days to go" at the current daily average, plus the date that lands on.
         function daysToGoalText(uid, g) {
             const avg = getDailyAverage(uid);
@@ -1769,7 +1802,8 @@
                 div.innerHTML += `<div class="bg-white p-3 rounded border-l-4 ${done?'border-amber-400 bg-amber-50':'border-gray-200'} shadow-sm">
                     <div class="flex justify-between items-start">
                         <div><div class="font-bold text-sm">${g.label} (${userData[uid].name})</div><div class="text-xs text-gray-500">${g.steps.toLocaleString()}</div>
-                        ${!done ? `<div class="text-[10px] mt-1 text-${uid==='user1'?'green':'purple'}-600">${daysToGoalText(uid, g)}</div>` : `<div class="text-[10px] mt-1 text-amber-600 font-bold">Smashed it! 🎉</div>`}
+                        ${!done ? `<div class="text-[10px] mt-1 text-${uid==='user1'?'green':'purple'}-600">${daysToGoalText(uid, g)}</div>
+                        ${targetDateText(uid, g) ? `<div class="text-[10px] mt-0.5 text-gray-500">${targetDateText(uid, g)}</div>` : ''}` : `<div class="text-[10px] mt-1 text-amber-600 font-bold">Smashed it! 🎉</div>`}
                         </div>
                         <div class="flex items-center gap-2">
                             <div class="text-xl">${g.reward}</div>
@@ -1782,6 +1816,11 @@
                         <div class="flex gap-2">
                             <input type="number" class="stretch-f-steps flex-1 text-sm border rounded px-2 py-1" placeholder="Steps" value="${f.steps}" min="1" step="1000" />
                             <input type="text" class="stretch-f-reward w-16 text-sm border rounded px-2 py-1 text-center" placeholder="🎁" value="${String(f.reward).replace(/"/g,'&quot;')}" maxlength="4" />
+                        </div>
+                        <div class="flex gap-2 items-center">
+                            <label class="text-[10px] text-gray-500 whitespace-nowrap">By (optional)</label>
+                            <input type="date" class="stretch-f-date flex-1 text-sm border rounded px-2 py-1" value="${parseTargetDate(f.targetDate) ? f.targetDate : ''}" />
+                            ${parseTargetDate(f.targetDate) ? `<button type="button" class="stretch-clear-date text-[10px] text-gray-400 hover:text-gray-700 underline px-1">clear</button>` : ''}
                         </div>
                         <div class="flex gap-2 justify-end">
                             <button class="stretch-cancel-btn text-xs px-3 py-1 rounded bg-gray-100 text-gray-600">Cancel</button>
@@ -1802,28 +1841,40 @@
             div.querySelectorAll('.stretch-cancel-btn').forEach(btn => {
                 btn.onclick = () => { stretchEditing = null; stretchDraft = null; renderStretch(); };
             });
+            const readStretchForm = (card) => ({
+                label: card.querySelector('.stretch-f-label').value,
+                steps: parseInt(card.querySelector('.stretch-f-steps').value, 10) || 0,
+                reward: card.querySelector('.stretch-f-reward').value,
+                targetDate: card.querySelector('.stretch-f-date').value
+            });
             // Keep the draft in sync so a background Firestore update can't wipe what's being typed
-            div.querySelectorAll('.stretch-f-label, .stretch-f-steps, .stretch-f-reward').forEach(inp => {
-                inp.oninput = () => {
-                    const card = inp.closest('div.bg-white');
-                    stretchDraft = {
-                        label: card.querySelector('.stretch-f-label').value,
-                        steps: parseInt(card.querySelector('.stretch-f-steps').value, 10) || 0,
-                        reward: card.querySelector('.stretch-f-reward').value
-                    };
+            div.querySelectorAll('.stretch-f-label, .stretch-f-steps, .stretch-f-reward, .stretch-f-date').forEach(inp => {
+                inp.oninput = () => { stretchDraft = readStretchForm(inp.closest('div.bg-white')); };
+            });
+            // Date inputs are awkward to empty by hand, especially on a phone, so give the
+            // "leave it blank for no deadline" case a button of its own.
+            div.querySelectorAll('.stretch-clear-date').forEach(btn => {
+                btn.onclick = () => {
+                    stretchDraft = { ...readStretchForm(btn.closest('div.bg-white')), targetDate: '' };
+                    renderStretch();
                 };
             });
             div.querySelectorAll('.stretch-save-btn').forEach(btn => {
                 btn.onclick = async () => {
                     const card = btn.closest('div.bg-white');
-                    const label = card.querySelector('.stretch-f-label').value.trim();
-                    const steps = parseInt(card.querySelector('.stretch-f-steps').value, 10);
-                    const reward = card.querySelector('.stretch-f-reward').value.trim();
+                    const form = readStretchForm(card);
+                    const label = form.label.trim();
+                    const steps = form.steps;
+                    const reward = form.reward.trim();
                     if (!label || !steps || steps < 1) { alert('Give it a name and a step target!'); return; }
+                    // Left blank, the key is simply left off — which is also how an existing
+                    // deadline gets removed, since this replaces the whole `stretch` map.
+                    const stretch = { label, steps, reward: reward || '🎯' };
+                    if (parseTargetDate(form.targetDate)) stretch.targetDate = form.targetDate;
                     btn.disabled = true; btn.textContent = 'Saving...';
                     try {
                         const ref = btn.dataset.uid === 'user1' ? user1DocRef : user2DocRef;
-                        await updateDoc(ref, { stretch: { label, steps, reward: reward || '🎯' } });
+                        await updateDoc(ref, { stretch });
                         stretchEditing = null; stretchDraft = null;
                     } catch (e) {
                         console.error(e); alert('Could not save that — try again?');
