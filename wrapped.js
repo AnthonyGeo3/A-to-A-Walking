@@ -1,0 +1,674 @@
+// ---------------------------------------------------------------------------
+// Year Wrapped — the stats engine
+// ---------------------------------------------------------------------------
+// Pure by design: no DOM, no Firebase, no module-level state, nothing that
+// needs a browser. Every number the Wrapped show and the recap section display
+// comes out of computeWrapped(), so the two can never drift apart — the same
+// one-source-of-truth rule that settled the all-time vs. annual split.
+//
+// Logs arrive normalised, with a real Date rather than a Firestore Timestamp:
+//   { id, userId, steps, date, note, photoUrl, locationName, lat, lng }
+//
+// Everything is local-time, matching how the rest of the app buckets days.
+
+const MS_PER_DAY = 86400000;
+const UIDS = ['user1', 'user2'];
+
+// The app's own conversions, so a figure here can never contradict one on the
+// main page.
+export const STEPS_PER_MILE = 2100;
+export const STEPS_PER_KM = 1300;
+// Taken from the app's own milestone list rather than invented: the
+// "Everest × 300" stamp sits at 3,496,110 steps.
+export const STEPS_PER_EVEREST = 3496110 / 300;
+export const KM_PER_MARATHON = 42.195;
+
+// A place further than this from home was a trip out, not a walk round the block.
+export const TRIP_KM = 40;
+// What counts as a "good day" for streaks.
+export const STREAK_THRESHOLD = 10000;
+
+// Wrexham — where every journey in this app starts.
+export const HOME = { lat: 53.043, lng: -2.993 };
+
+// NOTE: these three mirror index.html. When index.html starts importing this
+// module it should drop its own copies and use these, so there is only ever one
+// definition of where a challenge year begins and ends.
+export const CHALLENGE_START_YEAR = 2025;
+export function challengeYearStart(n) { return new Date(CHALLENGE_START_YEAR + n - 1, 9, 1); }
+export function challengeYearEnd(n) { return new Date(CHALLENGE_START_YEAR + n, 9, 1); } // exclusive
+
+// --- small helpers ---------------------------------------------------------
+
+const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Mon=0 … Sun=6, matching the heatmap and the weekly rivalry bar.
+const weekdayIndex = (d) => (d.getDay() + 6) % 7;
+const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+// Challenge months run October (0) through September (11).
+const monthIndex = (d) => (d.getMonth() - 9 + 12) % 12;
+
+function eachDay(start, end) {
+    const out = [];
+    const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    while (cur < end) {
+        out.push(new Date(cur));
+        cur.setDate(cur.getDate() + 1);
+    }
+    return out;
+}
+
+export function haversineKm(a, b) {
+    if (!a || !b || a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null;
+    const R = 6371;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// Every sort in here breaks ties on the log id, so a replay puts the same
+// photos on the same slides in the same order.
+const byIdAsc = (a, b) => String(a.id).localeCompare(String(b.id));
+
+// Head-to-head comparison: who is higher, or null if they're level.
+const cmp = (a, b) => (a > b ? 'user1' : b > a ? 'user2' : null);
+
+// --- the engine ------------------------------------------------------------
+
+/**
+ * @param {Array} logs   every log, all users, all years — the year is filtered inside
+ * @param {number} yearN challenge year (1 = Oct 25–Sep 26)
+ * @param {object} opts  { names, milestones, milestoneDates, stretch, home, now }
+ */
+export function computeWrapped(logs, yearN, opts = {}) {
+    const names = opts.names || { user1: 'Ant', user2: 'Amy' };
+    const milestones = opts.milestones || [];
+    const milestoneDates = opts.milestoneDates || {};
+    const stretchGoals = opts.stretch || {};
+    const home = opts.home || HOME;
+    const now = opts.now instanceof Date ? opts.now : new Date();
+
+    const start = challengeYearStart(yearN);
+    const end = challengeYearEnd(yearN);
+
+    // Only logs that are dated, belong to a known person, and carry a sane step
+    // count can be placed on a journey.
+    const clean = (logs || []).filter(
+        (l) => l && UIDS.includes(l.userId) && l.date instanceof Date && Number.isFinite(Number(l.steps))
+    ).map((l) => ({ ...l, steps: Number(l.steps) }));
+
+    const inYear = clean
+        .filter((l) => l.date >= start && l.date < end)
+        .sort((a, b) => a.date - b.date || byIdAsc(a, b));
+
+    const dayList = eachDay(start, end);
+    const daysInYear = dayList.length;
+    const daysElapsed = now >= end
+        ? daysInYear
+        : Math.max(1, Math.min(daysInYear, Math.floor((startOfDay(now) - start) / MS_PER_DAY) + 1));
+
+    // --- per-day buckets, which everything else is built from ---------------
+    // Someone can log twice in a day (a morning and an evening walk), so the day
+    // is the unit, not the log.
+    const days = { user1: {}, user2: {} };
+    const dayLogs = { user1: {}, user2: {} };
+    inYear.forEach((l) => {
+        const k = dayKey(l.date);
+        days[l.userId][k] = (days[l.userId][k] || 0) + l.steps;
+        (dayLogs[l.userId][k] = dayLogs[l.userId][k] || []).push(l);
+    });
+
+    const per = {};
+    UIDS.forEach((uid) => { per[uid] = perUser(uid); });
+
+    // --- combined -----------------------------------------------------------
+    const bothTotal = per.user1.total + per.user2.total;
+    const allPlaces = collectPlaces(inYear, home);
+    const both = {
+        total: bothTotal,
+        km: bothTotal / STEPS_PER_KM,
+        miles: bothTotal / STEPS_PER_MILE,
+        destination: lastMilestoneAtOrBelow(bothTotal, milestones),
+        everests: bothTotal / STEPS_PER_EVEREST,
+        marathons: bothTotal / STEPS_PER_KM / KM_PER_MARATHON,
+        photoCount: per.user1.photos.count + per.user2.photos.count,
+        places: allPlaces,
+        countries: [...new Set(allPlaces.map((p) => p.country).filter(Boolean))].sort(),
+        daysLogged: dayList.filter((d) => {
+            const k = dayKey(d);
+            return (days.user1[k] || 0) > 0 || (days.user2[k] || 0) > 0;
+        }).length
+    };
+
+    const race = buildRace();
+    const months = buildMonths();
+    const awards = buildAwards();
+
+    return {
+        year: yearN,
+        start,
+        end,
+        daysInYear,
+        daysElapsed,
+        names,
+        user1: per.user1,
+        user2: per.user2,
+        both,
+        months,
+        race,
+        awards,
+        // Convenience flags so a slide can skip itself without re-deriving this.
+        hasPhotos: both.photoCount > 0,
+        hasPlaces: allPlaces.length > 0,
+        hasNotes: per.user1.notes.length + per.user2.notes.length > 0
+    };
+
+    // --- per person ---------------------------------------------------------
+
+    function perUser(uid) {
+        const buckets = days[uid];
+        const keys = Object.keys(buckets);
+        const total = keys.reduce((t, k) => t + buckets[k], 0);
+        const daysLogged = keys.filter((k) => buckets[k] > 0).length;
+        const daysOver10k = keys.filter((k) => buckets[k] >= STREAK_THRESHOLD).length;
+        const userLogs = inYear.filter((l) => l.userId === uid);
+
+        // Top three days, each carrying its biggest single log so a slide can
+        // show that day's photo or note.
+        const bestDays = keys
+            .map((k) => {
+                const logsThatDay = (dayLogs[uid][k] || []).slice().sort((a, b) => b.steps - a.steps || byIdAsc(a, b));
+                return { key: k, date: startOfDay(logsThatDay[0].date), steps: buckets[k], log: logsThatDay[0] };
+            })
+            .sort((a, b) => b.steps - a.steps || byIdAsc(a.log, b.log))
+            .slice(0, 3);
+
+        // Streaks walk the full calendar, so a missed day genuinely breaks the run.
+        const longest10kStreak = longestRun((k) => (buckets[k] || 0) >= STREAK_THRESHOLD);
+        const longestLoggedStreak = longestRun((k) => (buckets[k] || 0) > 0);
+
+        // Mean steps on the days this person actually logged, by weekday.
+        const wdSum = new Array(7).fill(0);
+        const wdCount = new Array(7).fill(0);
+        dayList.forEach((d) => {
+            const v = buckets[dayKey(d)] || 0;
+            if (v <= 0) return;
+            const i = weekdayIndex(d);
+            wdSum[i] += v;
+            wdCount[i] += 1;
+        });
+        const weekdayMeans = wdSum.map((s, i) => (wdCount[i] ? s / wdCount[i] : 0));
+        let bestWeekday = null;
+        if (daysLogged > 0) {
+            let bi = 0;
+            weekdayMeans.forEach((m, i) => { if (m > weekdayMeans[bi]) bi = i; });
+            bestWeekday = { index: bi, name: WEEKDAY_NAMES[bi], mean: weekdayMeans[bi] };
+        }
+
+        // Month totals, and the best/quietest from them.
+        const monthTotals = new Array(12).fill(0);
+        dayList.forEach((d) => { monthTotals[monthIndex(d)] += buckets[dayKey(d)] || 0; });
+        const monthLabel = (i) => monthLabelFor(i);
+        let bestMonth = null;
+        let quietestMonth = null;
+        if (total > 0) {
+            let bi = 0;
+            let qi = 0;
+            monthTotals.forEach((t, i) => {
+                if (t > monthTotals[bi]) bi = i;
+                if (t < monthTotals[qi]) qi = i;
+            });
+            bestMonth = { index: bi, label: monthLabel(bi), steps: monthTotals[bi] };
+            quietestMonth = { index: qi, label: monthLabel(qi), steps: monthTotals[qi] };
+        }
+
+        const photoLogs = userLogs.filter((l) => l.photoUrl);
+        const noteLogs = userLogs.filter((l) => l.note && String(l.note).trim());
+
+        return {
+            uid,
+            name: names[uid],
+            total,
+            km: total / STEPS_PER_KM,
+            miles: total / STEPS_PER_MILE,
+            daysLogged,
+            daysOver10k,
+            avgPerLoggedDay: daysLogged ? total / daysLogged : 0,
+            avgPerCalendarDay: total / daysElapsed,
+            bestDays,
+            bestWeek: bestWeekFor(buckets),
+            bestMonth,
+            quietestMonth,
+            monthTotals,
+            longest10kStreak,
+            longestLoggedStreak,
+            bestWeekday,
+            weekdayMeans,
+            photos: {
+                list: photoLogs,
+                count: photoLogs.length,
+                first: photoLogs[0] || null,
+                last: photoLogs[photoLogs.length - 1] || null
+            },
+            places: collectPlaces(userLogs, home),
+            notes: noteLogs.map((l) => ({
+                id: l.id, userId: uid, date: l.date, note: String(l.note).trim(), steps: l.steps, photoUrl: l.photoUrl || null
+            })),
+            milestones: milestonesFor(uid),
+            stretch: stretchFor(uid)
+        };
+
+        function longestRun(pass) {
+            let best = null;
+            let runStart = null;
+            let len = 0;
+            dayList.forEach((d) => {
+                if (pass(dayKey(d))) {
+                    if (len === 0) runStart = d;
+                    len += 1;
+                    if (!best || len > best.days) best = { from: runStart, to: d, days: len };
+                } else {
+                    len = 0;
+                }
+            });
+            return best || { from: null, to: null, days: 0 };
+        }
+    }
+
+    // Best Mon–Sun week that sits entirely inside the challenge year.
+    function bestWeekFor(buckets) {
+        const first = new Date(start);
+        const dow = weekdayIndex(first);
+        if (dow !== 0) first.setDate(first.getDate() + (7 - dow));
+        let best = null;
+        for (const w = new Date(first); ; w.setDate(w.getDate() + 7)) {
+            const wEnd = new Date(w);
+            wEnd.setDate(wEnd.getDate() + 7);
+            if (wEnd > end) break;
+            let sum = 0;
+            for (const d of eachDay(w, wEnd)) sum += buckets[dayKey(d)] || 0;
+            const last = new Date(wEnd);
+            last.setDate(last.getDate() - 1);
+            if (!best || sum > best.steps) best = { from: new Date(w), to: last, steps: sum };
+        }
+        return best || { from: null, to: null, steps: 0 };
+    }
+
+    // Distinct places, keyed on the short name plus coordinates rounded to ~1km,
+    // so the same park logged twenty times is one place.
+    function collectPlaces(source, origin) {
+        const byKey = new Map();
+        source.forEach((l) => {
+            if (l.lat == null || l.lng == null) return;
+            const shortName = l.locationName
+                ? String(l.locationName).split(',')[0].trim()
+                : `${l.lat.toFixed(3)}, ${l.lng.toFixed(3)}`;
+            const key = `${shortName}|${l.lat.toFixed(2)},${l.lng.toFixed(2)}`;
+            // Nominatim puts the country last, so that's where it is.
+            const parts = l.locationName ? String(l.locationName).split(',').map((s) => s.trim()) : [];
+            const country = parts.length > 1 ? parts[parts.length - 1] : null;
+            if (!byKey.has(key)) {
+                byKey.set(key, {
+                    key,
+                    name: shortName,
+                    country,
+                    lat: l.lat,
+                    lng: l.lng,
+                    km: haversineKm(origin, { lat: l.lat, lng: l.lng }),
+                    firstDate: l.date,
+                    lastDate: l.date,
+                    logs: []
+                });
+            }
+            const p = byKey.get(key);
+            p.logs.push(l);
+            if (l.date < p.firstDate) p.firstDate = l.date;
+            if (l.date > p.lastDate) p.lastDate = l.date;
+        });
+        const list = [...byKey.values()];
+        list.forEach((p) => { p.isTrip = p.km != null && p.km > TRIP_KM; });
+        return list.sort((a, b) => (b.km || 0) - (a.km || 0) || a.name.localeCompare(b.name));
+    }
+
+    // From the app's own milestone replay — this engine does not re-derive
+    // milestone dates, it reads the ones the passport already computed.
+    function milestonesFor(uid) {
+        const other = uid === 'user1' ? 'user2' : 'user1';
+        const out = [];
+        milestones.forEach((m) => {
+            const entry = milestoneDates[m.steps];
+            if (!entry) return;
+            const mine = (entry[uid] || []).find((r) => r.year === yearN);
+            if (!mine) return;
+            const theirs = (entry[other] || []).find((r) => r.year === yearN);
+            out.push({
+                label: m.label,
+                steps: m.steps,
+                description: m.description,
+                date: mine.date,
+                first: !theirs || mine.date <= theirs.date
+            });
+        });
+        return out.sort((a, b) => a.date - b.date || a.steps - b.steps);
+    }
+
+    // The stretch goal sits on the all-time total, not the year's, so the
+    // crossing date is found by replaying every log this person has ever added.
+    function stretchFor(uid) {
+        const goal = stretchGoals[uid];
+        if (!goal || !Number.isFinite(Number(goal.steps))) return null;
+        const target = Number(goal.steps);
+        const history = clean.filter((l) => l.userId === uid).sort((a, b) => a.date - b.date || byIdAsc(a, b));
+        let cum = 0;
+        let crossed = null;
+        for (const l of history) {
+            cum += l.steps;
+            if (cum >= target) { crossed = l.date; break; }
+        }
+        return {
+            label: goal.label,
+            steps: target,
+            reward: goal.reward || '🎯',
+            targetDate: goal.targetDate || null,
+            total: cum >= target ? cum : history.reduce((t, l) => t + l.steps, 0),
+            done: crossed != null,
+            crossedOn: crossed,
+            // Only meaningful when it hasn't been reached yet.
+            pct: Math.min(100, (history.reduce((t, l) => t + l.steps, 0) / target) * 100)
+        };
+    }
+
+    function monthLabelFor(i) {
+        const y = CHALLENGE_START_YEAR + yearN - 1 + (i <= 2 ? 0 : 1);
+        const m = (9 + i) % 12;
+        return new Date(y, m, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+    }
+
+    // --- the race -----------------------------------------------------------
+
+    function buildRace() {
+        const daysOut = [];
+        const cum = { user1: 0, user2: 0 };
+        const leadChanges = [];
+        const daysInLead = { user1: 0, user2: 0 };
+        let biggestSwing = null;
+        // 0 while they're level; only a flip between two non-zero signs counts as
+        // the lead changing hands, so first blood isn't reported as a change.
+        let lastSign = 0;
+
+        dayList.forEach((d) => {
+            const k = dayKey(d);
+            const day = { user1: days.user1[k] || 0, user2: days.user2[k] || 0 };
+            cum.user1 += day.user1;
+            cum.user2 += day.user2;
+
+            const diff = cum.user1 - cum.user2;
+            const sign = diff > 0 ? 1 : diff < 0 ? -1 : 0;
+            if (sign !== 0) {
+                daysInLead[sign > 0 ? 'user1' : 'user2'] += 1;
+                if (lastSign !== 0 && sign !== lastSign) {
+                    leadChanges.push({ date: new Date(d), to: sign > 0 ? 'user1' : 'user2' });
+                }
+                lastSign = sign;
+            }
+
+            const swing = Math.abs(day.user1 - day.user2);
+            if (swing > 0 && (!biggestSwing || swing > biggestSwing.by)) {
+                biggestSwing = { date: new Date(d), by: swing, uid: day.user1 > day.user2 ? 'user1' : 'user2' };
+            }
+
+            daysOut.push({ date: new Date(d), cum: { ...cum }, day });
+        });
+
+        return {
+            days: daysOut,
+            leadChanges,
+            daysInLead,
+            biggestSwing,
+            finalGap: Math.abs(cum.user1 - cum.user2),
+            winner: cmp(cum.user1, cum.user2)
+        };
+    }
+
+    // --- month chapters -----------------------------------------------------
+
+    function buildMonths() {
+        return Array.from({ length: 12 }, (_, i) => {
+            const monthLogs = inYear.filter((l) => monthIndex(l.date) === i);
+            const totals = { user1: 0, user2: 0 };
+            monthLogs.forEach((l) => { totals[l.userId] += l.steps; });
+
+            // Best single day that month, across both of them.
+            const dayTotals = {};
+            monthLogs.forEach((l) => {
+                const k = `${l.userId}|${dayKey(l.date)}`;
+                dayTotals[k] = (dayTotals[k] || 0) + l.steps;
+            });
+            let bestDay = null;
+            Object.entries(dayTotals).forEach(([k, steps]) => {
+                if (bestDay && steps <= bestDay.steps) return;
+                const [uid, key] = k.split('|');
+                const logsThatDay = (dayLogs[uid][key] || []).slice().sort((a, b) => b.steps - a.steps || byIdAsc(a, b));
+                bestDay = { uid, date: startOfDay(logsThatDay[0].date), steps, log: logsThatDay[0] };
+            });
+
+            const photos = pickMonthPhotos(monthLogs);
+            const chosenIds = new Set(photos.map((p) => p.id));
+
+            // The quote deliberately comes from a log we didn't already put on
+            // screen as a polaroid, so the caption and the pull-quote aren't the
+            // same sentence.
+            const quoteLog = monthLogs
+                .filter((l) => l.note && String(l.note).trim() && !chosenIds.has(l.id))
+                .sort((a, b) => String(b.note).trim().length - String(a.note).trim().length || byIdAsc(a, b))[0];
+
+            const monthMilestones = [];
+            UIDS.forEach((uid) => {
+                per[uid].milestones.forEach((m) => {
+                    if (monthIndex(m.date) === i) monthMilestones.push({ ...m, uid });
+                });
+            });
+
+            const trips = allPlaces
+                .filter((p) => p.isTrip && p.logs.some((l) => monthIndex(l.date) === i))
+                .map((p) => {
+                    const firstHere = p.logs.filter((l) => monthIndex(l.date) === i).sort((a, b) => a.date - b.date)[0];
+                    return { name: p.name, km: p.km, country: p.country, date: firstHere.date, uid: firstHere.userId };
+                })
+                .sort((a, b) => b.km - a.km);
+
+            return {
+                index: i,
+                label: monthLabelFor(i),
+                totals,
+                winner: cmp(totals.user1, totals.user2),
+                bestDay,
+                photos,
+                milestones: monthMilestones.sort((a, b) => a.date - b.date),
+                trips,
+                quote: quoteLog
+                    ? { id: quoteLog.id, uid: quoteLog.userId, date: quoteLog.date, text: String(quoteLog.note).trim(), steps: quoteLog.steps }
+                    : null,
+                isEmpty: totals.user1 === 0 && totals.user2 === 0
+            };
+        });
+    }
+
+    // Up to three photos a month, alternating between the two of you where both
+    // have something, biggest days first, with a nudge for anywhere far from home.
+    function pickMonthPhotos(monthLogs) {
+        const score = (l) => {
+            const place = allPlaces.find((p) => p.logs.includes(l));
+            return l.steps + (place && place.isTrip ? 5000 : 0);
+        };
+        const queues = {};
+        UIDS.forEach((uid) => {
+            queues[uid] = monthLogs
+                .filter((l) => l.userId === uid && l.photoUrl)
+                .map((l) => ({ log: l, score: score(l) }))
+                .sort((a, b) => b.score - a.score || byIdAsc(a.log, b.log));
+        });
+
+        const out = [];
+        // Start with whoever has the single strongest photo that month.
+        let turn = (queues.user1[0]?.score || -1) >= (queues.user2[0]?.score || -1) ? 'user1' : 'user2';
+        while (out.length < 3 && (queues.user1.length || queues.user2.length)) {
+            const other = turn === 'user1' ? 'user2' : 'user1';
+            const from = queues[turn].length ? turn : other;
+            out.push(queues[from].shift().log);
+            turn = from === 'user1' ? 'user2' : 'user1';
+        }
+        return out;
+    }
+
+    // --- awards -------------------------------------------------------------
+
+    function buildAwards() {
+        const s = per;
+        const halfAt = Math.floor(daysInYear / 2);
+        const halves = {};
+        UIDS.forEach((uid) => {
+            let first = 0;
+            let second = 0;
+            dayList.forEach((d, i) => {
+                const v = days[uid][dayKey(d)] || 0;
+                if (i < halfAt) first += v; else second += v;
+            });
+            halves[uid] = { first, second, ratio: first > 0 ? second / first : (second > 0 ? Infinity : 0) };
+        });
+
+        // Coefficient of variation across logged days — lower is steadier.
+        const consistency = {};
+        UIDS.forEach((uid) => {
+            const vals = Object.values(days[uid]).filter((v) => v > 0);
+            if (vals.length < 2) { consistency[uid] = null; return; }
+            const mean = vals.reduce((t, v) => t + v, 0) / vals.length;
+            const variance = vals.reduce((t, v) => t + (v - mean) ** 2, 0) / vals.length;
+            consistency[uid] = mean > 0 ? Math.sqrt(variance) / mean : null;
+        });
+
+        const septemberTotal = (uid) => s[uid].monthTotals[11];
+        const firstCount = (uid) => s[uid].milestones.filter((m) => m.first).length;
+
+        const defs = [
+            {
+                id: 'winner', emoji: '🏆', label: 'Year Winner',
+                pick: () => cmp(s.user1.total, s.user2.total),
+                detail: (uid) => `${Math.round(s[uid].total).toLocaleString()} steps`
+            },
+            {
+                id: 'ironLegs', emoji: '🦵', label: 'Iron Legs',
+                pick: () => cmp(s.user1.longest10kStreak.days, s.user2.longest10kStreak.days),
+                detail: (uid) => `${s[uid].longest10kStreak.days} days straight over 10k`
+            },
+            {
+                id: 'photographer', emoji: '📸', label: 'Photographer of the Year',
+                pick: () => cmp(s.user1.photos.count, s.user2.photos.count),
+                detail: (uid) => `${s[uid].photos.count} photos`
+            },
+            {
+                id: 'explorer', emoji: '🧭', label: 'Explorer',
+                pick: () => cmp(s.user1.places.length, s.user2.places.length),
+                detail: (uid) => `${s[uid].places.length} different places`
+            },
+            {
+                id: 'biggestDay', emoji: '🚀', label: 'Biggest Day',
+                pick: () => cmp(s.user1.bestDays[0]?.steps || 0, s.user2.bestDays[0]?.steps || 0),
+                detail: (uid) => `${(s[uid].bestDays[0]?.steps || 0).toLocaleString()} in one day`
+            },
+            {
+                id: 'weekendWarrior', emoji: '📅', label: 'Weekend Warrior',
+                each: (uid) => !!s[uid].bestWeekday && s[uid].bestWeekday.index >= 5,
+                detail: (uid) => `${s[uid].bestWeekday.name}s are your big day`
+            },
+            {
+                id: 'weekdayGrinder', emoji: '⚙️', label: 'Weekday Grinder',
+                each: (uid) => !!s[uid].bestWeekday && s[uid].bestWeekday.index <= 4,
+                detail: (uid) => `${s[uid].bestWeekday.name}s are your big day`
+            },
+            {
+                id: 'closer', emoji: '🏁', label: 'The Closer',
+                pick: () => cmp(septemberTotal('user1'), septemberTotal('user2')),
+                detail: (uid) => `${septemberTotal(uid).toLocaleString()} steps in September`
+            },
+            {
+                id: 'storyteller', emoji: '✍️', label: 'Storyteller',
+                pick: () => cmp(s.user1.notes.length, s.user2.notes.length),
+                detail: (uid) => `${s[uid].notes.length} notes written`
+            },
+            {
+                id: 'firstToArrive', emoji: '👑', label: 'First to Arrive',
+                pick: () => cmp(firstCount('user1'), firstCount('user2')),
+                detail: (uid) => `First to ${firstCount(uid)} milestones`
+            },
+            {
+                id: 'comeback', emoji: '🌙', label: 'Strong Finish',
+                pick: () => cmp(halves.user1.ratio, halves.user2.ratio),
+                detail: (uid) => `${Math.round((halves[uid].ratio - 1) * 100)}% busier in the second half`
+            },
+            {
+                id: 'consistent', emoji: '🎯', label: 'Most Consistent',
+                pick: () => {
+                    if (consistency.user1 == null || consistency.user2 == null) return null;
+                    return cmp(-consistency.user1, -consistency.user2); // lower spread wins
+                },
+                detail: (uid) => `${Math.round(s[uid].avgPerLoggedDay).toLocaleString()} a day, give or take`
+            }
+        ];
+
+        const out = { user1: [], user2: [] };
+        defs.forEach((def) => {
+            const give = (uid) => {
+                if (out[uid].length >= 3) return;
+                out[uid].push({ id: def.id, emoji: def.emoji, label: def.label, detail: def.detail(uid) });
+            };
+            if (def.each) {
+                UIDS.forEach((uid) => { if (def.each(uid)) give(uid); });
+            } else {
+                const winner = def.pick();
+                if (winner) give(winner);
+            }
+        });
+
+        // Nobody leaves empty-handed — but rather than hand someone a contest they
+        // lost, fall back to a plain statement of their own year.
+        UIDS.forEach((uid) => {
+            if (out[uid].length === 0) {
+                out[uid].push({
+                    id: 'longHaul', emoji: '👟', label: 'The Long Haul',
+                    detail: `${Math.round(s[uid].total).toLocaleString()} steps this year`
+                });
+            }
+        });
+
+        return out;
+    }
+}
+
+// The furthest place along the app's own journey that a step count reaches.
+export function lastMilestoneAtOrBelow(steps, milestones) {
+    let best = null;
+    (milestones || []).forEach((m) => {
+        if (m.steps <= steps && (!best || m.steps > best.steps)) best = m;
+    });
+    return best;
+}
+
+// Which completed challenge years have a Wrapped to show. A year only qualifies
+// once it is over, which is what keeps the surprise until 1 October.
+export function wrappedYears(now = new Date(), { preview = false } = {}) {
+    const currentYear = Math.max(1, (() => {
+        const startYear = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
+        return startYear - CHALLENGE_START_YEAR + 1;
+    })());
+    const lastComplete = preview ? currentYear : currentYear - 1;
+    const out = [];
+    for (let n = 1; n <= lastComplete; n++) out.push(n);
+    return out;
+}
