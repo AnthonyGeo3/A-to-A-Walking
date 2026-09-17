@@ -687,6 +687,22 @@ export const yearWord = (n) => (YEAR_WORDS[n] ? `Year ${YEAR_WORDS[n]}` : `Year 
 
 const fmt = (n) => Math.round(n || 0).toLocaleString('en-GB');
 const fmtDate = (d) => (d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+const fmtDayShort = (d) => (d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }) : '');
+
+// Names, notes and place names are all things the two of them typed, and they
+// end up in innerHTML, so they get escaped on the way — same helper the main
+// page uses.
+const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// A fixed tilt per photo, hashed from the log id the same way the map scatters
+// its pins — so a replay lays the polaroids out exactly as it did the first time.
+function seedRotation(id, spread = 6) {
+    let h = 0;
+    const str = String(id);
+    for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+    return (((Math.abs(h) % 1000) / 1000) * spread * 2 - spread).toFixed(2);
+}
 
 function el(tag, className, html) {
     const node = document.createElement(tag);
@@ -716,8 +732,7 @@ const delay = (node, ms) => { node.style.animationDelay = `${ms}ms`; return node
 // { id, duration, wash, skip?, images?, render } — a slide whose skip() is true
 // is dropped before the progress bar is built, so the segment count is honest.
 
-export const SLIDES = [
-    {
+const COVER_SLIDE = {
         id: 'cover',
         duration: Infinity, // waits for a tap: nothing plays before she's looking
         wash: ['#22c55e', '#9333ea'],
@@ -729,13 +744,14 @@ export const SLIDES = [
                 delay(el('div', 'wrapped-huge wrapped-rise', yearWord(stats.year)), 150),
                 delay(el('div', 'wrapped-sub wrapped-rise', `${fmtDate(stats.start)} — ${fmtDate(lastDay)}`), 350),
                 delay(el('div', 'wrapped-mid wrapped-rise',
-                    `<span class="wrapped-ant">${stats.names.user1}</span> <span style="opacity:.5">&amp;</span> <span class="wrapped-amy">${stats.names.user2}</span>`), 500),
+                    `<span class="wrapped-ant">${esc(stats.names.user1)}</span> <span style="opacity:.5">&amp;</span> <span class="wrapped-amy">${esc(stats.names.user2)}</span>`), 500),
                 delay(el('div', 'wrapped-hint wrapped-rise', ctx.reduced ? 'Tap to begin' : 'Tap to begin'), 900)
             );
             return wrap;
         }
-    },
-    {
+};
+
+const BIG_NUMBER_SLIDE = {
         id: 'bigNumber',
         duration: 8000,
         wash: ['#22c55e', '#0ea5e9'],
@@ -760,8 +776,9 @@ export const SLIDES = [
             wrap._cleanup = countUp(number, stats.both.total, 2500, ctx.reduced);
             return wrap;
         }
-    },
-    {
+};
+
+const FINALE_SLIDE = {
         id: 'finale',
         duration: Infinity,
         isLast: true,
@@ -797,8 +814,110 @@ export const SLIDES = [
             }
             return wrap;
         }
-    }
+};
+
+// Each month gets its own colour pair, so twelve chapters don't blur into one.
+const MONTH_WASHES = [
+    ['#f59e0b', '#9333ea'], ['#6366f1', '#22c55e'], ['#0ea5e9', '#a855f7'],
+    ['#22c55e', '#0ea5e9'], ['#ec4899', '#6366f1'], ['#22c55e', '#f59e0b'],
+    ['#a855f7', '#22c55e'], ['#0ea5e9', '#22c55e'], ['#f59e0b', '#ec4899'],
+    ['#22c55e', '#9333ea'], ['#0ea5e9', '#f59e0b'], ['#9333ea', '#22c55e']
 ];
+
+// A month chapter. Quiet months go past quickly by design; a month with photos,
+// a milestone or a trip in it earns a little longer on screen.
+export function monthSlide(month) {
+    let duration = 5000;
+    if (month.photos.length) duration += 2000;
+    if (month.milestones.length || month.trips.length) duration += 1000;
+
+    return {
+        id: `month-${month.index}`,
+        duration: Math.min(duration, 9000),
+        wash: MONTH_WASHES[month.index % MONTH_WASHES.length],
+        // A month neither of them walked in is a dead slide, so it doesn't get one.
+        skip: () => month.isEmpty,
+        images: () => month.photos.map((p) => p.photoUrl).filter(Boolean),
+        render(stats) {
+            const colourOf = (uid) => (uid === 'user1' ? 'wrapped-ant' : 'wrapped-amy');
+            const space = month.label.lastIndexOf(' ');
+            const monthName = month.label.slice(0, space);
+            const yearName = month.label.slice(space + 1);
+
+            const wrap = el('div');
+            wrap.append(el('div', 'wrapped-month-name wrapped-rise',
+                `${esc(monthName)}<span class="wrapped-month-year">${esc(yearName)}</span>`));
+
+            const t = month.totals;
+            const sum = t.user1 + t.user2;
+            const pct1 = sum ? (t.user1 / sum) * 100 : 50;
+            wrap.append(delay(el('div', 'wrapped-rise', `
+                <div class="wrapped-bar">
+                    <span class="wrapped-bar-ant" style="width:${pct1}%"></span>
+                    <span class="wrapped-bar-amy" style="width:${100 - pct1}%"></span>
+                </div>
+                <div class="wrapped-bar-labels">
+                    <span class="wrapped-ant">${esc(stats.names.user1)} ${fmt(t.user1)}${month.winner === 'user1' ? ' 👑' : ''}</span>
+                    <span class="wrapped-amy">${month.winner === 'user2' ? '👑 ' : ''}${esc(stats.names.user2)} ${fmt(t.user2)}</span>
+                </div>`), 150));
+
+            if (month.bestDay) {
+                wrap.append(delay(el('div', 'wrapped-sub wrapped-rise',
+                    `Best day &middot; <strong class="${colourOf(month.bestDay.uid)}">${esc(stats.names[month.bestDay.uid])}</strong>
+                     &middot; ${fmt(month.bestDay.steps)} &middot; ${fmtDayShort(month.bestDay.date)}`), 300));
+            }
+
+            if (month.photos.length) {
+                const row = el('div', 'wrapped-polaroids');
+                const width = month.photos.length === 1 ? 190 : month.photos.length === 2 ? 152 : 118;
+                month.photos.forEach((log, i) => {
+                    const card = el('div', 'wrapped-polaroid');
+                    card.style.setProperty('--rot', `${seedRotation(log.id)}deg`);
+                    card.style.width = `${width}px`;
+                    card.style.zIndex = String(10 + i);
+                    card.style.animationDelay = `${500 + i * 150}ms`;
+                    const img = el('img');
+                    img.src = log.photoUrl;
+                    img.alt = '';
+                    const place = log.locationName ? String(log.locationName).split(',')[0].trim() : '';
+                    card.append(img, el('div', 'wrapped-cap',
+                        `${fmtDayShort(log.date)} &middot; ${esc(stats.names[log.userId])}${place ? ` &middot; ${esc(place)}` : ''}`));
+                    row.append(card);
+                });
+                wrap.append(row);
+            }
+
+            const callouts = delay(el('div', 'wrapped-callouts wrapped-rise'), 650);
+            month.milestones.forEach((m) => {
+                callouts.append(el('div', 'wrapped-note',
+                    `<span>${esc(m.label)}</span><em>${esc(stats.names[m.uid])} &middot; ${fmtDate(m.date)}</em>`));
+            });
+            month.trips.slice(0, 2).forEach((trip) => {
+                callouts.append(el('div', 'wrapped-note',
+                    `<span>✈️ ${esc(trip.name)}</span><em>${fmt(trip.km)} km from home</em>`));
+            });
+            if (callouts.childElementCount) wrap.append(callouts);
+
+            if (month.quote) {
+                wrap.append(delay(el('div', 'wrapped-quote wrapped-rise',
+                    `&ldquo;${esc(month.quote.text)}&rdquo;
+                     <span class="wrapped-quote-who">${esc(stats.names[month.quote.uid])}, ${fmtDayShort(month.quote.date)}</span>`), 800));
+            }
+
+            return wrap;
+        }
+    };
+}
+
+// The running order. Twelve month chapters are the spine of it.
+export function buildSlides(stats) {
+    return [
+        COVER_SLIDE,
+        BIG_NUMBER_SLIDE,
+        ...stats.months.map((m) => monthSlide(m)),
+        FINALE_SLIDE
+    ];
+}
 
 /**
  * Mount and run the show.
@@ -811,10 +930,13 @@ export function openWrapped(stats, opts = {}) {
         ? opts.reducedMotion
         : (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-    const list = (opts.slides || SLIDES).filter((s) => !s.skip || !s.skip(stats));
+    const list = (opts.slides || buildSlides(stats)).filter((s) => !s.skip || !s.skip(stats));
     if (!list.length) return () => {};
 
     const overlay = el('div', 'wrapped-overlay');
+    // The stylesheet can see the media query but not an explicit reducedMotion
+    // option, so tell it which decision was actually made.
+    if (reduced) overlay.classList.add('wrapped-reduced');
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', `${yearWord(stats.year)} Wrapped`);

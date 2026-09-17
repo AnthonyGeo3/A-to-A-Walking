@@ -9,6 +9,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     computeWrapped,
+    buildSlides,
+    monthSlide,
+    yearWord,
     wrappedYears,
     haversineKm,
     lastMilestoneAtOrBelow,
@@ -467,6 +470,69 @@ test('a tied award goes to nobody', () => {
     // Both were first to exactly one milestone.
     const all = w.awards.user1.concat(w.awards.user2).map((a) => a.id);
     assert.ok(!all.includes('firstToArrive'));
+});
+
+// --- the running order -----------------------------------------------------
+
+test('the running order is cover, big number, twelve months, finale', () => {
+    const w = wrapped();
+    const slides = buildSlides(w);
+    assert.equal(slides.length, 15);
+    assert.equal(slides[0].id, 'cover');
+    assert.equal(slides[1].id, 'bigNumber');
+    assert.deepEqual(slides.slice(2, 14).map((s) => s.id),
+        Array.from({ length: 12 }, (_, i) => `month-${i}`));
+    assert.equal(slides[14].id, 'finale');
+});
+
+test('the cover and finale wait for a tap, everything else is timed', () => {
+    const slides = buildSlides(wrapped());
+    assert.equal(slides[0].duration, Infinity);
+    assert.equal(slides[slides.length - 1].duration, Infinity);
+    assert.ok(slides.slice(1, -1).every((s) => Number.isFinite(s.duration) && s.duration > 0));
+});
+
+test('a month with more in it stays on screen longer, up to a cap', () => {
+    const w = wrapped();
+    const dur = (i) => monthSlide(w.months[i]).duration;
+    // November: no photos, no milestones, no trips.
+    assert.equal(dur(1), 5000);
+    // December: both crossed half a million.
+    assert.equal(dur(2), 6000);
+    // July: three photos, a trip.
+    assert.equal(dur(9), 8000);
+    // Nothing runs past nine seconds however much happened.
+    assert.ok(buildSlides(w).every((s) => !Number.isFinite(s.duration) || s.duration <= 9000));
+});
+
+test('a month neither of them walked in is dropped from the running order', () => {
+    const empty = computeWrapped([], 1, OPTS);
+    const kept = buildSlides(empty).filter((s) => !s.skip || !s.skip(empty));
+    assert.deepEqual(kept.map((s) => s.id), ['cover', 'bigNumber', 'finale'],
+        'twelve empty months leave nothing to show');
+
+    // In the real fixture every month has something in it.
+    const w = wrapped();
+    assert.equal(buildSlides(w).filter((s) => s.skip && s.skip(w)).length, 0);
+});
+
+test('month slides declare the photos to preload', () => {
+    const w = wrapped();
+    const july = buildSlides(w).find((s) => s.id === 'month-9');
+    assert.deepEqual(july.images(w), [
+        'https://example.test/lisbon.jpg',
+        'https://example.test/2026-07-05.jpg',
+        'https://example.test/2026-07-03.jpg'
+    ]);
+    // A month with no photos asks for nothing.
+    assert.deepEqual(buildSlides(w).find((s) => s.id === 'month-1').images(w), []);
+});
+
+test('year names read as words', () => {
+    assert.equal(yearWord(1), 'Year One');
+    assert.equal(yearWord(2), 'Year Two');
+    assert.equal(yearWord(10), 'Year Ten');
+    assert.equal(yearWord(11), 'Year 11', 'past ten it just uses the number');
 });
 
 // --- edge cases ------------------------------------------------------------

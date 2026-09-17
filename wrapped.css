@@ -225,11 +225,136 @@ body.wrapped-lock { overflow: hidden; }
     flex-shrink: 0;
 }
 
+
+/* --- month chapters ------------------------------------------------------- */
+
+.wrapped-month-name {
+    font-size: clamp(1.9rem, 9vw, 3rem);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+.wrapped-month-year {
+    font-size: 0.42em;
+    font-weight: 700;
+    opacity: 0.55;
+    letter-spacing: 0.06em;
+    display: block;
+}
+
+/* A two-tone bar for the month's head-to-head, echoing the rivalry bar on the
+   main page but sitting on a dark background. */
+.wrapped-bar {
+    display: flex;
+    height: 10px;
+    border-radius: 99px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.14);
+    width: min(100%, 340px);
+    margin: 0 auto;
+}
+.wrapped-bar span { height: 100%; display: block; }
+.wrapped-bar .wrapped-bar-ant { background: linear-gradient(to right, #4ade80, #34d399); }
+.wrapped-bar .wrapped-bar-amy { background: linear-gradient(to right, #a855f7, #9333ea); }
+.wrapped-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    width: min(100%, 340px);
+    margin: 6px auto 0;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* --- polaroids ------------------------------------------------------------ */
+
+.wrapped-polaroids {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    margin: 6px 0 2px;
+    min-height: 10px;
+}
+.wrapped-polaroid {
+    --rot: 0deg;
+    background: #fdfdfb;
+    padding: 7px 7px 4px;
+    border-radius: 3px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    flex: 0 0 auto;
+    opacity: 0;
+    animation: wrapped-drop 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.wrapped-polaroid + .wrapped-polaroid { margin-left: -12px; }
+.wrapped-polaroid img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    /* Shows through if the photo can't be fetched, so an offline slide is a
+       grey frame rather than a broken icon. */
+    background: #dcdce1;
+}
+.wrapped-polaroid .wrapped-cap {
+    font-size: 9px;
+    line-height: 1.3;
+    color: #4b5563;
+    padding: 5px 1px 3px;
+    text-align: center;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@keyframes wrapped-drop {
+    from { opacity: 0; transform: translateY(-26px) rotate(0deg) scale(0.94); }
+    to   { opacity: 1; transform: translateY(0) rotate(var(--rot)) scale(1); }
+}
+
+/* --- the little callouts under a month ------------------------------------ */
+
+.wrapped-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    max-width: 100%;
+}
+.wrapped-note em { font-style: normal; opacity: 0.6; font-weight: 500; }
+.wrapped-quote {
+    font-size: clamp(0.85rem, 3.6vw, 1rem);
+    font-style: italic;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.4;
+    max-width: 30ch;
+    margin: 0 auto;
+}
+.wrapped-quote-who { font-style: normal; font-size: 11px; opacity: 0.55; display: block; margin-top: 3px; }
+
+
+.wrapped-callouts {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+}
+
 /* --- reduced motion ------------------------------------------------------- */
-/* Auto-advance is switched off in JS as well, so the show waits for a tap
-   rather than moving on by itself. */
+/* Two ways in: the media query, and a class the player adds when it has been
+   told to hold still. The player also switches auto-advance off, so the show
+   waits to be tapped rather than moving on by itself. Both routes are listed
+   because a caller can ask for reduced motion explicitly, and the stylesheet
+   has no other way of knowing. */
 @media (prefers-reduced-motion: reduce) {
     .wrapped-slide { transition: none; }
     .wrapped-rise { opacity: 1; animation: none; transform: none; }
     .wrapped-seg > i { animation: none; }
+    .wrapped-polaroid { opacity: 1; animation: none; transform: rotate(var(--rot)); }
 }
+.wrapped-reduced .wrapped-slide { transition: none; }
+.wrapped-reduced .wrapped-rise { opacity: 1; animation: none; transform: none; }
+.wrapped-reduced .wrapped-seg > i { animation: none; }
+.wrapped-reduced .wrapped-polaroid { opacity: 1; animation: none; transform: rotate(var(--rot)); }
