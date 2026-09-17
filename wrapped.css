@@ -358,3 +358,63 @@ body.wrapped-lock { overflow: hidden; }
 .wrapped-reduced .wrapped-rise { opacity: 1; animation: none; transform: none; }
 .wrapped-reduced .wrapped-seg > i { animation: none; }
 .wrapped-reduced .wrapped-polaroid { opacity: 1; animation: none; transform: rotate(var(--rot)); }
+
+/* --- the race ------------------------------------------------------------- */
+/* Series colours are the darker steps of the app's own green and purple: the
+   brighter ones the rest of the app uses sit outside the OKLCH lightness band
+   for a dark surface. This pair passes all six palette checks against #0b0f1a.
+   Identity is never carried by colour alone — both lines are labelled at their
+   end, and named again with a swatch under the chart. */
+.wrapped-race { width: 100%; height: auto; display: block; overflow: visible; }
+/* The gap is revealed left to right by widening the group's clip, so the fills
+   and the outline arrive together rather than the line racing ahead of them. */
+.wrapped-race-reveal {
+    clip-path: inset(0 100% 0 0);
+    animation: wrapped-draw 3s cubic-bezier(0.3, 0.6, 0.3, 1) forwards;
+}
+@keyframes wrapped-draw { to { clip-path: inset(0 0 0 0); } }
+.wrapped-race-edge {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.75);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.wrapped-race-pole { font-size: 9px; font-weight: 800; }
+
+/* Hairline, solid, one shade off the surface. */
+.wrapped-race-axis { stroke: rgba(255, 255, 255, 0.18); stroke-width: 1; }
+.wrapped-race-tick { stroke: rgba(255, 255, 255, 0.4); stroke-width: 1; }
+.wrapped-race-tick-dot { fill: rgba(255, 255, 255, 0.7); }
+.wrapped-race-axis-label { fill: rgba(255, 255, 255, 0.45); font-size: 8px; font-weight: 600; }
+.wrapped-key { display: flex; gap: 14px; justify-content: center; font-size: 12px; font-weight: 600; }
+.wrapped-key span { display: inline-flex; align-items: center; gap: 5px; }
+.wrapped-key i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+/* --- two-column blocks (best days, habits) -------------------------------- */
+
+.wrapped-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: start;
+}
+.wrapped-col-head { font-size: 12px; font-weight: 800; margin-bottom: 6px; }
+.wrapped-rank {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 0;
+    justify-content: center;
+}
+.wrapped-rank .wrapped-rank-steps { font-weight: 800; font-variant-numeric: tabular-nums; }
+.wrapped-rank .wrapped-rank-when { font-size: 10px; color: rgba(255, 255, 255, 0.55); }
+.wrapped-fact { font-size: 12px; line-height: 1.5; padding: 5px 0; }
+.wrapped-fact strong { display: block; font-size: 15px; font-weight: 800; }
+.wrapped-fact em { font-style: normal; color: rgba(255, 255, 255, 0.55); font-size: 10px; }
+
+.wrapped-reduced .wrapped-race-reveal { animation: none; clip-path: none; }
+@media (prefers-reduced-motion: reduce) {
+    .wrapped-race-reveal { animation: none; clip-path: none; }
+}

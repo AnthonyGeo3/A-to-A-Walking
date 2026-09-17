@@ -688,6 +688,9 @@ export const yearWord = (n) => (YEAR_WORDS[n] ? `Year ${YEAR_WORDS[n]}` : `Year 
 const fmt = (n) => Math.round(n || 0).toLocaleString('en-GB');
 const fmtDate = (d) => (d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 const fmtDayShort = (d) => (d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }) : '');
+// Inside a month chapter the month is the headline, so the short form is enough.
+// Anywhere that spans the whole year, the month has to come with it.
+const fmtDayMonth = (d) => (d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '');
 
 // Names, notes and place names are all things the two of them typed, and they
 // end up in innerHTML, so they get escaped on the way — same helper the main
@@ -816,6 +819,192 @@ const FINALE_SLIDE = {
         }
 };
 
+// The race chart's series colours. Deliberately not the brighter green and
+// purple used elsewhere in the show: those sit outside the OKLCH lightness band
+// for a dark surface. These are darker steps of the same two hues and pass the
+// lightness, chroma, colour-vision separation and contrast checks against
+// #0b0f1a. Both lines are also labelled at their end and named with a swatch
+// underneath, so identity never rests on colour.
+const RACE_ANT = '#16a34a';
+const RACE_AMY = '#a855f7';
+
+let raceClipSeq = 0;
+
+const RACE_SLIDE = {
+    id: 'race',
+    duration: 10000,
+    wash: ['#0ea5e9', '#9333ea'],
+    skip: (stats) => stats.both.total === 0,
+    render(stats) {
+        // Plotting both cumulative totals as two climbing lines looks impressive
+        // and says almost nothing: over a year they sit on top of each other, and
+        // a 30,000-step day is one per cent of the height, so the big days the
+        // chart is supposed to show simply don't register. What the question
+        // "who's winning, and what did the big days do" actually asks for is the
+        // gap between them over time — one series, diverging either side of a
+        // neutral zero line. Lead changes are the crossings, and a big day is a
+        // visible kink instead of an invisible one.
+        const days = stats.race.days;
+        const gaps = days.map((d) => d.cum.user1 - d.cum.user2);
+        const maxAbs = Math.max(1, ...gaps.map(Math.abs));
+
+        const W = 340, H = 190, padL = 4, padR = 4, padT = 16, padB = 22;
+        const plotW = W - padL - padR;
+        const plotH = H - padT - padB;
+        const zeroY = padT + plotH / 2;
+        const xAt = (i) => padL + (i / Math.max(1, days.length - 1)) * plotW;
+        const yAt = (gap) => zeroY - (gap / maxAbs) * (plotH / 2);
+
+        const line = gaps.map((g, i) => `${i ? 'L' : 'M'}${xAt(i).toFixed(1)},${yAt(g).toFixed(1)}`).join('');
+        const area = `M${xAt(0).toFixed(1)},${zeroY.toFixed(1)}${line.slice(1)}L${xAt(days.length - 1).toFixed(1)},${zeroY.toFixed(1)}Z`;
+
+        // Unique per mount, so replaying the show can't collide with a stale
+        // definition still in the document.
+        const uid = `wr${++raceClipSeq}`;
+
+        const crossings = stats.race.leadChanges.map((c) => {
+            const i = days.findIndex((d) => d.date.getTime() === c.date.getTime());
+            return i < 0 ? '' :
+                `<line class="wrapped-race-tick" x1="${xAt(i).toFixed(1)}" y1="${padT}" x2="${xAt(i).toFixed(1)}" y2="${padT + plotH}"/>
+                 <circle class="wrapped-race-tick-dot" cx="${xAt(i).toFixed(1)}" cy="${zeroY.toFixed(1)}" r="3"/>`;
+        }).join('');
+
+        const axisLabels = days.map((d, i) => ({ d, i }))
+            .filter(({ d }) => d.date.getDate() === 1 && [9, 0, 3, 6].includes(d.date.getMonth()))
+            .map(({ d, i }) => `<text class="wrapped-race-axis-label" x="${xAt(i).toFixed(1)}" y="${H - 7}" text-anchor="middle">${d.date.toLocaleDateString('en-GB', { month: 'short' })}</text>`)
+            .join('');
+
+        const changeCount = stats.race.leadChanges.length;
+        const title = changeCount === 0 ? 'A runaway'
+            : changeCount < 3 ? 'It changed hands' : 'Neck and neck';
+
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'The race'));
+        wrap.append(delay(el('div', 'wrapped-big wrapped-rise', title), 150));
+        wrap.append(el('div', 'wrapped-rise', `
+            <svg class="wrapped-race" viewBox="0 0 ${W} ${H}" role="img"
+                 aria-label="How far ahead ${esc(stats.names.user1)} or ${esc(stats.names.user2)} was, through the year">
+                <defs>
+                    <clipPath id="${uid}-up"><rect x="0" y="0" width="${W}" height="${zeroY.toFixed(1)}"/></clipPath>
+                    <clipPath id="${uid}-down"><rect x="0" y="${zeroY.toFixed(1)}" width="${W}" height="${(H - zeroY).toFixed(1)}"/></clipPath>
+                </defs>
+                <g class="wrapped-race-reveal">
+                    <path d="${area}" fill="${RACE_ANT}" fill-opacity="0.45" clip-path="url(#${uid}-up)"/>
+                    <path d="${area}" fill="${RACE_AMY}" fill-opacity="0.45" clip-path="url(#${uid}-down)"/>
+                    <path class="wrapped-race-edge" d="${line}"/>
+                    ${crossings}
+                </g>
+                <line class="wrapped-race-axis" x1="${padL}" y1="${zeroY.toFixed(1)}" x2="${padL + plotW}" y2="${zeroY.toFixed(1)}"/>
+                <text class="wrapped-race-pole" x="${padL + 2}" y="${padT + 8}" fill="${RACE_ANT}">${esc(stats.names.user1)} ahead</text>
+                <text class="wrapped-race-pole" x="${padL + 2}" y="${(padT + plotH - 2).toFixed(1)}" fill="${RACE_AMY}">${esc(stats.names.user2)} ahead</text>
+                ${axisLabels}
+            </svg>`));
+
+        const lines = [];
+        lines.push(changeCount === 0
+            ? 'The lead never changed hands.'
+            : `Lead changed hands <strong>${changeCount}</strong> ${changeCount === 1 ? 'time' : 'times'}.`);
+        lines.push(`${esc(stats.names.user1)} led for ${fmt(stats.race.daysInLead.user1)} days, ${esc(stats.names.user2)} for ${fmt(stats.race.daysInLead.user2)}.`);
+        if (stats.race.biggestSwing) {
+            const sw = stats.race.biggestSwing;
+            lines.push(`Biggest day's swing: ${fmtDate(sw.date)}, ${esc(stats.names[sw.uid])} by ${fmt(sw.by)}.`);
+        }
+        lines.push(`<span style="opacity:.6">Furthest apart: ${fmt(maxAbs)} steps.</span>`);
+        wrap.append(delay(el('div', 'wrapped-sub wrapped-rise', lines.join('<br>')), 2700));
+        return wrap;
+    }
+};
+
+const BEST_DAYS_SLIDE = {
+    id: 'bestDays',
+    duration: 7000,
+    wash: ['#f59e0b', '#9333ea'],
+    skip: (stats) => !stats.user1.bestDays.length && !stats.user2.bestDays.length,
+    images: (stats) => ['user1', 'user2']
+        .map((uid) => stats[uid].bestDays[0] && stats[uid].bestDays[0].log.photoUrl)
+        .filter(Boolean),
+    render(stats) {
+        const medals = ['🥇', '🥈', '🥉'];
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'Best days'));
+
+        const cols = delay(el('div', 'wrapped-cols wrapped-rise'), 200);
+        ['user1', 'user2'].forEach((uid) => {
+            const colour = uid === 'user1' ? 'wrapped-ant' : 'wrapped-amy';
+            const col = el('div');
+            col.append(el('div', `wrapped-col-head ${colour}`, esc(stats.names[uid])));
+
+            // Only the gold day gets a photo, so two phones' worth of polaroids
+            // don't crowd out the numbers.
+            const top = stats[uid].bestDays[0];
+            if (top && top.log.photoUrl) {
+                const row = el('div', 'wrapped-polaroids');
+                const card = el('div', 'wrapped-polaroid');
+                card.style.setProperty('--rot', `${seedRotation(top.log.id)}deg`);
+                card.style.width = '104px';
+                card.style.animationDelay = '400ms';
+                const img = el('img');
+                img.src = top.log.photoUrl;
+                img.alt = '';
+                card.append(img, el('div', 'wrapped-cap', fmtDayMonth(top.date)));
+                row.append(card);
+                col.append(row);
+            }
+
+            if (!stats[uid].bestDays.length) {
+                col.append(el('div', 'wrapped-rank', '<span class="wrapped-rank-when">Nothing logged</span>'));
+            }
+            stats[uid].bestDays.forEach((b, i) => {
+                col.append(el('div', 'wrapped-rank',
+                    `<span>${medals[i]}</span>
+                     <span class="wrapped-rank-steps">${fmt(b.steps)}</span>
+                     <span class="wrapped-rank-when">${fmtDayMonth(b.date)}</span>`));
+            });
+            cols.append(col);
+        });
+        wrap.append(cols);
+        return wrap;
+    }
+};
+
+const HABITS_SLIDE = {
+    id: 'habits',
+    duration: 7000,
+    wash: ['#22c55e', '#6366f1'],
+    skip: (stats) => !stats.user1.daysLogged && !stats.user2.daysLogged,
+    render(stats) {
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'The habit'));
+        const cols = delay(el('div', 'wrapped-cols wrapped-rise'), 200);
+
+        ['user1', 'user2'].forEach((uid) => {
+            const u = stats[uid];
+            const colour = uid === 'user1' ? 'wrapped-ant' : 'wrapped-amy';
+            const col = el('div');
+            col.append(el('div', `wrapped-col-head ${colour}`, esc(stats.names[uid])));
+
+            const streak = u.longest10kStreak;
+            col.append(el('div', 'wrapped-fact',
+                streak.days > 0
+                    ? `<strong>${streak.days} ${streak.days === 1 ? 'day' : 'days'}</strong>
+                       in a row over 10k<br><em>${fmtDate(streak.from)} — ${fmtDate(streak.to)}</em>`
+                    : '<strong>—</strong> no run over 10k this year'));
+
+            col.append(el('div', 'wrapped-fact',
+                `<strong>${fmt(u.daysLogged)} of ${stats.daysInYear}</strong> days logged`));
+
+            if (u.bestWeekday) {
+                col.append(el('div', 'wrapped-fact',
+                    `<strong>${u.bestWeekday.name}s</strong> are the big day<br><em>${fmt(u.bestWeekday.mean)} on average</em>`));
+            }
+            cols.append(col);
+        });
+
+        wrap.append(cols);
+        return wrap;
+    }
+};
+
 // Each month gets its own colour pair, so twelve chapters don't blur into one.
 const MONTH_WASHES = [
     ['#f59e0b', '#9333ea'], ['#6366f1', '#22c55e'], ['#0ea5e9', '#a855f7'],
@@ -915,6 +1104,9 @@ export function buildSlides(stats) {
         COVER_SLIDE,
         BIG_NUMBER_SLIDE,
         ...stats.months.map((m) => monthSlide(m)),
+        RACE_SLIDE,
+        BEST_DAYS_SLIDE,
+        HABITS_SLIDE,
         FINALE_SLIDE
     ];
 }

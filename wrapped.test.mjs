@@ -474,15 +474,29 @@ test('a tied award goes to nobody', () => {
 
 // --- the running order -----------------------------------------------------
 
-test('the running order is cover, big number, twelve months, finale', () => {
+test('the running order runs cover, big number, months, race, finale', () => {
     const w = wrapped();
     const slides = buildSlides(w);
-    assert.equal(slides.length, 15);
-    assert.equal(slides[0].id, 'cover');
-    assert.equal(slides[1].id, 'bigNumber');
-    assert.deepEqual(slides.slice(2, 14).map((s) => s.id),
-        Array.from({ length: 12 }, (_, i) => `month-${i}`));
-    assert.equal(slides[14].id, 'finale');
+    assert.deepEqual(slides.map((s) => s.id), [
+        'cover', 'bigNumber',
+        ...Array.from({ length: 12 }, (_, i) => `month-${i}`),
+        'race', 'bestDays', 'habits', 'finale'
+    ]);
+});
+
+test('slides that have nothing to show drop out', () => {
+    const empty = computeWrapped([], 1, OPTS);
+    const kept = buildSlides(empty).filter((s) => !s.skip || !s.skip(empty));
+    assert.deepEqual(kept.map((s) => s.id), ['cover', 'bigNumber', 'finale'],
+        'no race to draw, no best days, no habits, no months');
+});
+
+test('best days preloads only the photos it will show', () => {
+    const w = wrapped();
+    const slide = buildSlides(w).find((s) => s.id === 'bestDays');
+    // Ant's best day is the planted 20,000 in March, which has no photo; Amy's
+    // is the 500,000 in September, likewise. So there is nothing to preload.
+    assert.deepEqual(slide.images(w), []);
 });
 
 test('the cover and finale wait for a tap, everything else is timed', () => {
@@ -490,6 +504,15 @@ test('the cover and finale wait for a tap, everything else is timed', () => {
     assert.equal(slides[0].duration, Infinity);
     assert.equal(slides[slides.length - 1].duration, Infinity);
     assert.ok(slides.slice(1, -1).every((s) => Number.isFinite(s.duration) && s.duration > 0));
+});
+
+test('the whole show is a few minutes if left alone', () => {
+    const w = wrapped();
+    const timed = buildSlides(w)
+        .filter((s) => (!s.skip || !s.skip(w)) && Number.isFinite(s.duration))
+        .reduce((t, s) => t + s.duration, 0);
+    // Long enough to feel like a story, short enough to sit through.
+    assert.ok(timed > 90000 && timed < 200000, `${Math.round(timed / 1000)}s`);
 });
 
 test('a month with more in it stays on screen longer, up to a cap', () => {
@@ -501,19 +524,16 @@ test('a month with more in it stays on screen longer, up to a cap', () => {
     assert.equal(dur(2), 6000);
     // July: three photos, a trip.
     assert.equal(dur(9), 8000);
-    // Nothing runs past nine seconds however much happened.
-    assert.ok(buildSlides(w).every((s) => !Number.isFinite(s.duration) || s.duration <= 9000));
+    // No chapter runs past nine seconds however much happened in it.
+    assert.ok(w.months.every((m) => monthSlide(m).duration <= 9000));
 });
 
-test('a month neither of them walked in is dropped from the running order', () => {
-    const empty = computeWrapped([], 1, OPTS);
-    const kept = buildSlides(empty).filter((s) => !s.skip || !s.skip(empty));
-    assert.deepEqual(kept.map((s) => s.id), ['cover', 'bigNumber', 'finale'],
-        'twelve empty months leave nothing to show');
-
-    // In the real fixture every month has something in it.
+test('every month in the real fixture has something worth showing', () => {
     const w = wrapped();
     assert.equal(buildSlides(w).filter((s) => s.skip && s.skip(w)).length, 0);
+    // December is the month Amy sat out, but Ant still walked, so it stays.
+    const dec = buildSlides(w).find((s) => s.id === 'month-2');
+    assert.equal(dec.skip(w), false);
 });
 
 test('month slides declare the photos to preload', () => {
