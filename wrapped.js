@@ -163,6 +163,9 @@ export function computeWrapped(logs, yearN, opts = {}) {
         months,
         race,
         awards,
+        // Where next year's annual journey restarts from — the finale hands over
+        // to it.
+        firstMilestone: milestones[0] || null,
         // Convenience flags so a slide can skip itself without re-deriving this.
         hasPhotos: both.photoCount > 0,
         hasPlaces: allPlaces.length > 0,
@@ -671,4 +674,284 @@ export function wrappedYears(now = new Date(), { preview = false } = {}) {
     const out = [];
     for (let n = 1; n <= lastComplete; n++) out.push(n);
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// The show
+// ---------------------------------------------------------------------------
+// Everything below touches the DOM, but only when called — the module itself
+// stays importable in node, which is what keeps the engine above testable.
+
+const YEAR_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+export const yearWord = (n) => (YEAR_WORDS[n] ? `Year ${YEAR_WORDS[n]}` : `Year ${n}`);
+
+const fmt = (n) => Math.round(n || 0).toLocaleString('en-GB');
+const fmtDate = (d) => (d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+
+function el(tag, className, html) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (html != null) node.innerHTML = html;
+    return node;
+}
+
+// Rolls a number up from zero. Returns its own canceller, because a slide can
+// be tapped away long before the count finishes.
+function countUp(node, to, ms, reduced) {
+    if (reduced || !(ms > 0)) { node.textContent = fmt(to); return () => {}; }
+    let raf = 0;
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const tick = (t) => {
+        const p = Math.min(1, (t - t0) / ms);
+        node.textContent = fmt(to * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+}
+
+const delay = (node, ms) => { node.style.animationDelay = `${ms}ms`; return node; };
+
+// --- slides ----------------------------------------------------------------
+// { id, duration, wash, skip?, images?, render } — a slide whose skip() is true
+// is dropped before the progress bar is built, so the segment count is honest.
+
+export const SLIDES = [
+    {
+        id: 'cover',
+        duration: Infinity, // waits for a tap: nothing plays before she's looking
+        wash: ['#22c55e', '#9333ea'],
+        render(stats, ctx) {
+            const lastDay = new Date(stats.end.getTime() - 86400000);
+            const wrap = el('div');
+            wrap.append(
+                el('div', 'wrapped-eyebrow wrapped-rise', 'A to A Walking'),
+                delay(el('div', 'wrapped-huge wrapped-rise', yearWord(stats.year)), 150),
+                delay(el('div', 'wrapped-sub wrapped-rise', `${fmtDate(stats.start)} — ${fmtDate(lastDay)}`), 350),
+                delay(el('div', 'wrapped-mid wrapped-rise',
+                    `<span class="wrapped-ant">${stats.names.user1}</span> <span style="opacity:.5">&amp;</span> <span class="wrapped-amy">${stats.names.user2}</span>`), 500),
+                delay(el('div', 'wrapped-hint wrapped-rise', ctx.reduced ? 'Tap to begin' : 'Tap to begin'), 900)
+            );
+            return wrap;
+        }
+    },
+    {
+        id: 'bigNumber',
+        duration: 8000,
+        wash: ['#22c55e', '#0ea5e9'],
+        render(stats, ctx) {
+            const wrap = el('div');
+            const number = el('div', 'wrapped-huge');
+            number.textContent = '0';
+            const km = delay(el('div', 'wrapped-big wrapped-rise', `${fmt(stats.both.km)} km`), 2400);
+            const dest = stats.both.destination
+                ? delay(el('div', 'wrapped-mid wrapped-rise',
+                    `Together, that's Wrexham to<br><strong>${stats.both.destination.label}</strong>`), 3400)
+                : delay(el('div', 'wrapped-mid wrapped-rise',
+                    `That's ${fmt(stats.both.marathons)} marathons between you`), 3400);
+
+            wrap.append(
+                el('div', 'wrapped-eyebrow wrapped-rise', 'Between you, this year'),
+                number,
+                el('div', 'wrapped-sub', 'steps'),
+                km,
+                dest
+            );
+            wrap._cleanup = countUp(number, stats.both.total, 2500, ctx.reduced);
+            return wrap;
+        }
+    },
+    {
+        id: 'finale',
+        duration: Infinity,
+        isLast: true,
+        wash: ['#9333ea', '#22c55e'],
+        render(stats, ctx) {
+            const wrap = el('div');
+            const next = stats.firstMilestone
+                ? `Next stop on the annual journey: <strong>${stats.firstMilestone.label}</strong>`
+                : 'The annual journey begins again from zero.';
+
+            wrap.append(
+                el('div', 'wrapped-eyebrow wrapped-rise', `That was ${yearWord(stats.year).toLowerCase()}`),
+                delay(el('div', 'wrapped-big wrapped-rise', `${yearWord(stats.year + 1)} starts now.`), 200),
+                delay(el('div', 'wrapped-mid wrapped-rise', next), 500),
+                delay(el('div', 'wrapped-sub wrapped-rise',
+                    'From tomorrow, these days start turning up in <em>A year ago today</em>.'), 800)
+            );
+
+            const actions = delay(el('div', 'wrapped-actions wrapped-rise'), 1100);
+            const replay = el('button', 'wrapped-btn', '↻ Replay');
+            replay.addEventListener('click', ctx.replay);
+            actions.append(replay);
+            const recap = el('button', 'wrapped-btn wrapped-btn-primary', 'See the recap');
+            recap.addEventListener('click', ctx.recap);
+            actions.append(recap);
+            wrap.append(actions);
+
+            if (!ctx.reduced && typeof globalThis.confetti === 'function') {
+                const colours = ['#4ade80', '#22c55e', '#a855f7', '#9333ea'];
+                globalThis.confetti({ particleCount: 200, spread: 120, origin: { y: 0.6 }, colors: colours });
+                setTimeout(() => globalThis.confetti({ particleCount: 80, spread: 60, origin: { y: 0.7, x: 0.25 } }), 300);
+                setTimeout(() => globalThis.confetti({ particleCount: 80, spread: 60, origin: { y: 0.7, x: 0.75 } }), 600);
+            }
+            return wrap;
+        }
+    }
+];
+
+/**
+ * Mount and run the show.
+ * @param {object} stats  from computeWrapped()
+ * @param {object} opts   { onClose({ index, finished }), onRecap(), slides, reducedMotion }
+ * @returns {function} a close handle, in case the caller needs to dismiss it
+ */
+export function openWrapped(stats, opts = {}) {
+    const reduced = opts.reducedMotion != null
+        ? opts.reducedMotion
+        : (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+    const list = (opts.slides || SLIDES).filter((s) => !s.skip || !s.skip(stats));
+    if (!list.length) return () => {};
+
+    const overlay = el('div', 'wrapped-overlay');
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', `${yearWord(stats.year)} Wrapped`);
+
+    const progress = el('div', 'wrapped-progress');
+    const segs = list.map(() => {
+        const seg = el('div', 'wrapped-seg');
+        seg.append(el('i'));
+        progress.append(seg);
+        return seg;
+    });
+
+    const closeBtn = el('button', 'wrapped-close', '&times;');
+    closeBtn.setAttribute('aria-label', 'Close');
+    const stage = el('div', 'wrapped-stage');
+    overlay.append(progress, closeBtn, stage);
+
+    let index = -1;
+    let finished = false;
+    let paused = false;
+    let current = null;
+    let generation = 0;
+    let holdTimer = null;
+    let heldOpen = false;
+
+    function clearSlide() {
+        if (!current) return;
+        if (typeof current._cleanup === 'function') current._cleanup();
+        current.remove();
+        current = null;
+    }
+
+    function preloadFrom(i) {
+        for (let k = i; k < Math.min(i + 3, list.length); k++) {
+            const urls = list[k].images ? list[k].images(stats) || [] : [];
+            urls.forEach((u) => { if (u) { const img = new Image(); img.src = u; } });
+        }
+    }
+
+    function show(i) {
+        if (i < 0 || i >= list.length) return;
+        const gen = ++generation;
+        index = i;
+        const def = list[i];
+        if (def.isLast) finished = true;
+
+        clearSlide();
+        const node = el('div', 'wrapped-slide');
+        if (def.wash) {
+            node.style.setProperty('--wash-a', def.wash[0]);
+            node.style.setProperty('--wash-b', def.wash[1]);
+        }
+        const ctx = { reduced, next, back, close: () => close(), replay, recap };
+        const body = def.render(stats, ctx);
+        if (typeof body._cleanup === 'function') node._cleanup = body._cleanup;
+        node.append(body);
+        stage.append(node);
+        // One frame before the class lands, so the fade actually runs.
+        requestAnimationFrame(() => node.classList.add('is-active'));
+        current = node;
+
+        // Reduced motion means no auto-advance at all: the show waits to be tapped.
+        const autoAdvance = !reduced && Number.isFinite(def.duration) && def.duration > 0;
+
+        segs.forEach((seg, k) => {
+            const bar = seg.firstElementChild;
+            seg.classList.remove('is-done', 'is-running');
+            bar.style.animation = 'none';
+            bar.style.animationPlayState = '';
+            void bar.offsetHeight; // cancel the old animation before starting a new one
+            if (k < i || (k === i && !autoAdvance)) seg.classList.add('is-done');
+        });
+
+        if (autoAdvance) {
+            const bar = segs[i].firstElementChild;
+            bar.style.animation = '';
+            bar.style.animationDuration = `${def.duration}ms`;
+            segs[i].classList.add('is-running');
+            bar.addEventListener('animationend', () => {
+                // A stale timer from a slide already tapped past must not advance.
+                if (gen === generation && !paused) next();
+            }, { once: true });
+        }
+
+        preloadFrom(i + 1);
+    }
+
+    function next() { if (index < list.length - 1) show(index + 1); }
+    function back() { if (index > 0) show(index - 1); }
+    function replay() { finished = false; show(0); }
+    function recap() { close(); if (typeof opts.onRecap === 'function') opts.onRecap(); }
+
+    function setPaused(on) {
+        paused = on;
+        segs.forEach((seg) => {
+            seg.firstElementChild.style.animationPlayState = on ? 'paused' : '';
+        });
+    }
+
+    function close() {
+        clearSlide();
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+        document.body.classList.remove('wrapped-lock');
+        if (typeof opts.onClose === 'function') opts.onClose({ index, finished });
+    }
+
+    // Press and hold pauses; a quick tap navigates. Left third goes back, the
+    // rest goes on — the convention everyone already has in their thumbs.
+    overlay.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('button')) return;
+        heldOpen = false;
+        holdTimer = setTimeout(() => { heldOpen = true; setPaused(true); }, 220);
+    });
+    const endPress = (e) => {
+        if (e.target.closest('button')) return;
+        clearTimeout(holdTimer);
+        if (heldOpen) { heldOpen = false; setPaused(false); return; }
+        const x = e.clientX != null ? e.clientX : 0;
+        if (x < overlay.clientWidth / 3) back(); else next();
+    };
+    overlay.addEventListener('pointerup', endPress);
+    overlay.addEventListener('pointercancel', () => { clearTimeout(holdTimer); if (heldOpen) { heldOpen = false; setPaused(false); } });
+
+    closeBtn.addEventListener('click', close);
+
+    function onKey(e) {
+        if (e.key === 'Escape') { close(); return; }
+        if (e.key === 'ArrowRight') { next(); return; }
+        if (e.key === 'ArrowLeft') { back(); return; }
+        if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); setPaused(!paused); }
+    }
+    document.addEventListener('keydown', onKey);
+
+    document.body.classList.add('wrapped-lock');
+    document.body.append(overlay);
+    show(0);
+
+    return close;
 }

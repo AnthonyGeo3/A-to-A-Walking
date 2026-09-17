@@ -11,7 +11,8 @@
     <link rel="apple-touch-icon" href="icon-192x192.png">
     <title>A to A Walking Challenge</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="wrapped.css">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -331,6 +332,9 @@
 
         <div class="p-4 sm:p-6">
 
+        <!-- Year Wrapped banner — hidden until a challenge year is actually over -->
+        <div id="wrapped-banner" class="hidden mb-6"></div>
+
         <!-- Input Section -->
         <div class="p-4 rounded-xl mb-8" style="background: linear-gradient(135deg, #f0fdf4 0%, #faf5ff 100%); border: 1px solid rgba(0,0,0,0.05);">
             <h2 class="text-lg font-semibold text-center mb-3">Log Steps</h2>
@@ -482,6 +486,8 @@
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        import { computeWrapped, openWrapped, wrappedYears, yearWord,
+                 CHALLENGE_START_YEAR, challengeYearStart, challengeYearEnd } from './wrapped.js';
 
         // --- ⚙️ CHALLENGE DATA ---
         const USER_1_NAME = "Ant";
@@ -738,7 +744,8 @@
         // A challenge year runs 1 Oct → 30 Sep. Year 1 = 1 Oct 2025 → 30 Sep 2026.
         // Annual totals are always *derived from the logs by date*, never stored — so
         // backdated entries land in the right year automatically and year 1 is untouched.
-        const CHALLENGE_START_YEAR = 2025;
+        // CHALLENGE_START_YEAR, challengeYearStart and challengeYearEnd are imported
+        // from wrapped.js, so there is only one definition of where a year begins.
         const CHALLENGE_START = new Date(CHALLENGE_START_YEAR, 9, 1);
 
         const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
@@ -750,8 +757,6 @@
             const startYear = d.getMonth() >= 9 ? d.getFullYear() : d.getFullYear() - 1;
             return startYear - CHALLENGE_START_YEAR + 1;
         }
-        function challengeYearStart(n) { return new Date(CHALLENGE_START_YEAR + n - 1, 9, 1); }
-        function challengeYearEnd(n) { return new Date(CHALLENGE_START_YEAR + n, 9, 1); } // exclusive
         function currentChallengeYear() { return Math.max(1, getChallengeYear(new Date())); }
 
         // Steps within the current challenge year, and where each person was on this same
@@ -2197,6 +2202,111 @@
             finally { stepInput.disabled = false; }
         }
 
+        // --- 🎁 Year Wrapped ---
+        // Date-gated on purpose: none of this renders until a challenge year is
+        // actually over, which is what keeps it a surprise without needing anything
+        // deployed on the day.
+        //   ?wrapped=preview  → treat the current year as complete, for a look first
+        //   ?wrapped=1        → same, and open it straight away
+        // Neither records the year as seen, so the real first play is still the
+        // first play.
+        const wrappedFlag = new URLSearchParams(location.search).get('wrapped');
+        const WRAPPED_PREVIEW = wrappedFlag === 'preview' || wrappedFlag === '1';
+        const WRAPPED_FORCE_OPEN = wrappedFlag === '1';
+        let wrappedAutoChecked = false;
+
+        const wrappedSeenKey = (n) => `a2a-wrapped-seen-y${n}`;
+        // localStorage throws in private mode. Failing to read just means it offers
+        // again, which is a far better failure than the show never appearing.
+        function wrappedSeen(n) {
+            try { return localStorage.getItem(wrappedSeenKey(n)) === '1'; } catch (e) { return false; }
+        }
+        function markWrappedSeen(n) {
+            try { localStorage.setItem(wrappedSeenKey(n), '1'); } catch (e) { /* nothing to do */ }
+        }
+
+        // The engine takes plain objects with a real Date — no Firestore wrapper,
+        // which is what lets it be tested outside a browser.
+        function wrappedLogs() {
+            return logData
+                .filter(l => l.date && typeof l.date.toDate === 'function')
+                .map(l => ({
+                    id: l.id, userId: l.userId, steps: l.steps, date: l.date.toDate(),
+                    note: l.note, photoUrl: l.photoUrl, locationName: l.locationName,
+                    lat: l.lat, lng: l.lng
+                }));
+        }
+
+        // Rebuilt on every play rather than cached, so a walk logged late still
+        // turns up in the year it belongs to.
+        function buildWrappedStats(n) {
+            return computeWrapped(wrappedLogs(), n, {
+                names: { user1: userData.user1.name, user2: userData.user2.name },
+                milestones: MASTER_MILESTONES,
+                milestoneDates: getMilestoneAchievementDates().annual,
+                stretch: { user1: getStretch('user1'), user2: getStretch('user2') }
+            });
+        }
+
+        // The most recent year with a Wrapped, or null before the first one ends.
+        function latestWrappedYear() {
+            const years = wrappedYears(new Date(), { preview: WRAPPED_PREVIEW });
+            return years.length ? years[years.length - 1] : null;
+        }
+
+        function playWrapped(n) {
+            openWrapped(buildWrappedStats(n), {
+                onClose: ({ index, finished }) => {
+                    // A mis-tap on the cover shouldn't burn the surprise, so it only
+                    // counts as seen once she's a few slides in. A preview never counts.
+                    if (!WRAPPED_PREVIEW && (finished || index >= 2)) {
+                        markWrappedSeen(n);
+                        renderWrappedBanner();
+                    }
+                },
+                onRecap: () => {
+                    const section = document.getElementById('wrapped-recap');
+                    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        }
+
+        function renderWrappedBanner() {
+            const host = document.getElementById('wrapped-banner');
+            if (!host) return;
+            const n = latestWrappedYear();
+            if (n == null || (!WRAPPED_PREVIEW && wrappedSeen(n))) {
+                host.classList.add('hidden');
+                host.innerHTML = '';
+                return;
+            }
+            host.classList.remove('hidden');
+            host.innerHTML = `
+                <button type="button" class="wrapped-banner">
+                    <span class="wrapped-banner-gift">🎁</span>
+                    <span class="wrapped-banner-text">
+                        <span class="wrapped-banner-title">Your ${yearWord(n)} Wrapped is ready</span>
+                        <span class="wrapped-banner-sub">A look back at everywhere you both walked</span>
+                    </span>
+                    <span class="wrapped-banner-go">Play ▶</span>
+                </button>`;
+            host.querySelector('button').onclick = () => playWrapped(n);
+        }
+
+        // The first visit after the gate opens plays on its own — but it opens on
+        // the cover slide, which waits for a tap, so nothing runs before she's
+        // actually looking at it.
+        function maybeAutoPlayWrapped() {
+            if (wrappedAutoChecked) return;
+            // Wait for real data: opening against an empty snapshot would show a
+            // year in which nobody walked anywhere.
+            if (!logData.length) return;
+            wrappedAutoChecked = true;
+            const n = latestWrappedYear();
+            if (n == null) return;
+            if (WRAPPED_FORCE_OPEN || (!WRAPPED_PREVIEW && !wrappedSeen(n))) playWrapped(n);
+        }
+
         // Move updateUI definition before main calls it
         function updateUI() {
             if (!userData.user1 || !userData.user2) return;
@@ -2211,6 +2321,8 @@
             renderStretch();
             renderHighScores();
             renderMap();
+            renderWrappedBanner();
+            maybeAutoPlayWrapped();
         }
 
         // --- Setup ---

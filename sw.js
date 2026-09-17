@@ -1,11 +1,13 @@
-const CACHE_NAME = 'a2a-walking-v11';
+const CACHE_NAME = 'a2a-walking-v12';
 const CORE_ASSETS = [
   '/A-to-A-Walking/',
   '/A-to-A-Walking/index.html',
+  '/A-to-A-Walking/wrapped.js',
+  '/A-to-A-Walking/wrapped.css',
   '/A-to-A-Walking/icon-192x192.png',
   '/A-to-A-Walking/icon-512x512.png',
   'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
   'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js'

@@ -1,0 +1,235 @@
+/* ---------------------------------------------------------------------------
+   Year Wrapped — the full-screen show
+   ---------------------------------------------------------------------------
+   Deliberately dark, against the app's pastel daytime look, so it reads as an
+   event rather than another panel. Portrait phone first; the installed PWA runs
+   standalone with a translucent status bar, so anything at the edges has to
+   clear the safe-area insets.
+   --------------------------------------------------------------------------- */
+
+body.wrapped-lock { overflow: hidden; }
+
+.wrapped-overlay {
+    position: fixed;
+    inset: 0;
+    /* Above the fullscreen map (9998) and every modal (z-50). */
+    z-index: 10000;
+    background: #0b0f1a;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh; /* iOS-friendly dynamic viewport, as the map already uses */
+    overflow: hidden;
+    font-family: 'Inter', sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+/* --- progress bar --------------------------------------------------------- */
+
+.wrapped-progress {
+    display: flex;
+    gap: 4px;
+    padding: 10px 12px 6px;
+    margin-top: env(safe-area-inset-top, 0px);
+    flex: 0 0 auto;
+    z-index: 3;
+}
+.wrapped-seg {
+    flex: 1 1 0;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.25);
+    overflow: hidden;
+}
+.wrapped-seg > i {
+    display: block;
+    height: 100%;
+    width: 100%;
+    background: #fff;
+    transform: scaleX(0);
+    transform-origin: left center;
+}
+.wrapped-seg.is-done > i { transform: scaleX(1); }
+/* The bar and the auto-advance share one clock: the slide moves on when this
+   animation ends, so they can never drift apart. */
+.wrapped-seg.is-running > i {
+    animation: wrapped-fill linear forwards;
+}
+@keyframes wrapped-fill {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+
+/* --- chrome --------------------------------------------------------------- */
+
+.wrapped-close {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 20px);
+    right: 12px;
+    z-index: 4;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.wrapped-close:hover { background: rgba(255, 255, 255, 0.22); }
+
+.wrapped-stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* --- slides --------------------------------------------------------------- */
+
+.wrapped-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px max(20px, env(safe-area-inset-left, 0px)) calc(28px + env(safe-area-inset-bottom, 0px));
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    overflow: hidden;
+}
+.wrapped-slide.is-active { opacity: 1; }
+
+/* Each slide washes the black with its own pair of colours. */
+.wrapped-slide::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(90% 60% at 18% 12%, var(--wash-a, #22c55e) 0%, transparent 62%),
+        radial-gradient(85% 60% at 85% 88%, var(--wash-b, #9333ea) 0%, transparent 62%);
+    opacity: 0.32;
+}
+.wrapped-slide > * { position: relative; z-index: 1; max-width: 640px; width: 100%; }
+
+/* --- typography ----------------------------------------------------------- */
+
+.wrapped-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+}
+.wrapped-huge {
+    font-size: clamp(3rem, 17vw, 6.5rem);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 0.92;
+    font-variant-numeric: tabular-nums;
+}
+.wrapped-big {
+    font-size: clamp(1.6rem, 8vw, 2.8rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+.wrapped-mid {
+    font-size: clamp(1rem, 4.6vw, 1.35rem);
+    font-weight: 600;
+    line-height: 1.35;
+}
+.wrapped-sub {
+    font-size: clamp(0.85rem, 3.6vw, 1rem);
+    color: rgba(255, 255, 255, 0.72);
+    line-height: 1.45;
+}
+.wrapped-hint {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+}
+.wrapped-ant { color: #4ade80; }
+.wrapped-amy { color: #c084fc; }
+
+/* Staggered entrances. Anything with a delay starts invisible, so a slide never
+   flashes its whole contents before settling. */
+.wrapped-rise {
+    opacity: 0;
+    animation: wrapped-rise 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes wrapped-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* --- buttons (the finale) ------------------------------------------------- */
+
+.wrapped-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+.wrapped-btn {
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 22px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+}
+.wrapped-btn:hover { background: rgba(255, 255, 255, 0.24); }
+.wrapped-btn-primary { background: #fff; color: #0b0f1a; }
+.wrapped-btn-primary:hover { background: #e7e7ea; }
+
+/* --- the banner on the main page ------------------------------------------ */
+
+.wrapped-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+    padding: 12px 14px;
+    border-radius: 12px;
+    color: #fff;
+    background: linear-gradient(120deg, #0b0f1a 0%, #1b2440 55%, #3b1d5e 100%);
+    box-shadow: 0 6px 18px rgba(11, 15, 26, 0.28);
+}
+.wrapped-banner .wrapped-banner-gift { font-size: 22px; }
+.wrapped-banner .wrapped-banner-text { flex: 1; min-width: 0; }
+.wrapped-banner .wrapped-banner-title { font-weight: 800; font-size: 14px; }
+.wrapped-banner .wrapped-banner-sub { font-size: 11px; color: rgba(255, 255, 255, 0.65); }
+.wrapped-banner .wrapped-banner-go {
+    font-size: 12px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    padding: 6px 14px;
+    flex-shrink: 0;
+}
+
+/* --- reduced motion ------------------------------------------------------- */
+/* Auto-advance is switched off in JS as well, so the show waits for a tap
+   rather than moving on by itself. */
+@media (prefers-reduced-motion: reduce) {
+    .wrapped-slide { transition: none; }
+    .wrapped-rise { opacity: 1; animation: none; transform: none; }
+    .wrapped-seg > i { animation: none; }
+}
