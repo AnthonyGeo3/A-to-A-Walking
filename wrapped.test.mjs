@@ -404,6 +404,21 @@ test('milestones come from the app replay, with a first-there flag', () => {
     assert.equal(w.user1.milestones.length, 2);
 });
 
+test('a milestone the year never reached is not reported for that year', () => {
+    // The passport map says both crossed half a million in year 1. If the logs
+    // for that year don't get anywhere near it, the logs are what count.
+    const thin = [
+        { id: 'a', userId: 'user1', steps: 1000, date: D(2025, 10, 5) },
+        { id: 'b', userId: 'user2', steps: 1000, date: D(2025, 10, 5) }
+    ];
+    const w = computeWrapped(thin, 1, OPTS);
+    assert.deepEqual(w.user1.milestones, []);
+    assert.deepEqual(w.user2.milestones, []);
+
+    // And the stamps slide stands down rather than showing places nobody reached.
+    assert.equal(buildSlides(w).find((s) => s.id === 'passport').skip(w), true);
+});
+
 test('stretch goals read against the all-time total, not the year', () => {
     const w = wrapped();
     // 3,000,000 is passed during year 1 — and the all-time replay includes the
@@ -480,7 +495,7 @@ test('the running order runs cover, big number, months, race, finale', () => {
     assert.deepEqual(slides.map((s) => s.id), [
         'cover', 'bigNumber',
         ...Array.from({ length: 12 }, (_, i) => `month-${i}`),
-        'race', 'bestDays', 'habits', 'finale'
+        'race', 'bestDays', 'habits', 'places', 'furthest', 'passport', 'awards', 'finale'
     ]);
 });
 
@@ -488,7 +503,48 @@ test('slides that have nothing to show drop out', () => {
     const empty = computeWrapped([], 1, OPTS);
     const kept = buildSlides(empty).filter((s) => !s.skip || !s.skip(empty));
     assert.deepEqual(kept.map((s) => s.id), ['cover', 'bigNumber', 'finale'],
-        'no race to draw, no best days, no habits, no months');
+        'no months, no race, no best days, habits, places, trips, stamps or awards');
+});
+
+test('the map slide steps aside when there is no map library', () => {
+    const w = wrapped();
+    const places = buildSlides(w).find((s) => s.id === 'places');
+    // Leaflet belongs to the page, not to this module.
+    assert.equal(typeof globalThis.L, 'undefined');
+    assert.equal(places.skip(w), true, 'no Leaflet, no map slide');
+
+    globalThis.L = {};
+    try {
+        assert.equal(places.skip(w), false, 'with Leaflet present and places to show, it plays');
+        const noPlaces = computeWrapped(
+            buildFixture().map((l) => ({ ...l, lat: undefined, lng: undefined })), 1, OPTS);
+        assert.equal(buildSlides(noPlaces).find((s) => s.id === 'places').skip(noPlaces), true);
+    } finally {
+        delete globalThis.L;
+    }
+});
+
+test('furthest and passport stand down when there is nothing to report', () => {
+    const w = wrapped();
+    const find = (id, stats) => buildSlides(stats).find((s) => s.id === id);
+    assert.equal(find('furthest', w).skip(w), false, 'Lisbon and Edinburgh are both trips');
+    assert.equal(find('passport', w).skip(w), false);
+
+    // Strip the locations and nothing is far from home any more.
+    const homebody = computeWrapped(
+        buildFixture().map((l) => ({ ...l, lat: undefined, lng: undefined, locationName: undefined })), 1, OPTS);
+    assert.equal(find('furthest', homebody).skip(homebody), true);
+
+    // No milestone dates means no stamps.
+    const nostamps = computeWrapped(buildFixture(), 1, { ...OPTS, milestoneDates: {} });
+    assert.equal(find('passport', nostamps).skip(nostamps), true);
+});
+
+test('furthest preloads the photo it will actually show', () => {
+    const w = wrapped();
+    // The furthest place is Lisbon, and that log has a photo.
+    assert.deepEqual(buildSlides(w).find((s) => s.id === 'furthest').images(w),
+        ['https://example.test/lisbon.jpg']);
 });
 
 test('best days preloads only the photos it will show', () => {
@@ -530,7 +586,8 @@ test('a month with more in it stays on screen longer, up to a cap', () => {
 
 test('every month in the real fixture has something worth showing', () => {
     const w = wrapped();
-    assert.equal(buildSlides(w).filter((s) => s.skip && s.skip(w)).length, 0);
+    const months = buildSlides(w).filter((s) => s.id.startsWith('month-'));
+    assert.equal(months.filter((s) => s.skip(w)).length, 0);
     // December is the month Amy sat out, but Ant still walked, so it stays.
     const dec = buildSlides(w).find((s) => s.id === 'month-2');
     assert.equal(dec.skip(w), false);

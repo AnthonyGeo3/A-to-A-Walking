@@ -263,7 +263,7 @@ export function computeWrapped(logs, yearN, opts = {}) {
             notes: noteLogs.map((l) => ({
                 id: l.id, userId: uid, date: l.date, note: String(l.note).trim(), steps: l.steps, photoUrl: l.photoUrl || null
             })),
-            milestones: milestonesFor(uid),
+            milestones: milestonesFor(uid, total),
             stretch: stretchFor(uid)
         };
 
@@ -340,11 +340,15 @@ export function computeWrapped(logs, yearN, opts = {}) {
     }
 
     // From the app's own milestone replay — this engine does not re-derive
-    // milestone dates, it reads the ones the passport already computed.
-    function milestonesFor(uid) {
+    // milestone dates, it reads the ones the passport already computed. It does
+    // check them against the year's own total though: the annual journey restarts
+    // from zero each year, so a milestone reported for this year that the year's
+    // steps never reach is a disagreement between the two, and the logs win.
+    function milestonesFor(uid, yearTotal) {
         const other = uid === 'user1' ? 'user2' : 'user1';
         const out = [];
         milestones.forEach((m) => {
+            if (m.steps > yearTotal) return;
             const entry = milestoneDates[m.steps];
             if (!entry) return;
             const mine = (entry[uid] || []).find((r) => r.year === yearN);
@@ -1005,6 +1009,202 @@ const HABITS_SLIDE = {
     }
 };
 
+const PLACES_SLIDE = {
+    id: 'places',
+    duration: 8000,
+    wash: ['#0ea5e9', '#22c55e'],
+    // Leaflet is loaded by the page, not by this module, so the slide checks for
+    // it rather than assuming it.
+    skip: (stats) => !stats.hasPlaces || typeof globalThis.L === 'undefined',
+    images: (stats) => stats.both.places
+        .map((p) => (p.logs.find((l) => l.photoUrl) || {}).photoUrl)
+        .filter(Boolean).slice(0, 6),
+    render(stats) {
+        const places = stats.both.places.slice().sort((a, b) => a.firstDate - b.firstDate);
+        const countries = stats.both.countries.length;
+
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'Everywhere you went'));
+        const host = el('div', 'wrapped-map');
+        wrap.append(host);
+        wrap.append(delay(el('div', 'wrapped-mid wrapped-rise',
+            `<strong>${places.length}</strong> ${places.length === 1 ? 'place' : 'places'}` +
+            (countries > 1 ? ` &middot; <strong>${countries}</strong> countries` : '')), 300));
+
+        let map = null;
+        const timers = [];
+        // The node has to be in the document with a size before Leaflet can lay
+        // itself out, and it is appended straight after render returns.
+        const raf = requestAnimationFrame(() => {
+            const L = globalThis.L;
+            map = L.map(host, {
+                zoomControl: false, attributionControl: false,
+                dragging: false, touchZoom: false, scrollWheelZoom: false,
+                doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false
+            });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            const bounds = L.latLngBounds(places.map((p) => [p.lat, p.lng]));
+            map.fitBounds(bounds, { padding: [30, 30], maxZoom: 11 });
+            // The slide fades in over the same beat, so make sure the map sized
+            // itself against the final box.
+            map.invalidateSize();
+
+            places.forEach((place, i) => {
+                timers.push(setTimeout(() => {
+                    if (!map) return;
+                    const first = place.logs.slice().sort((a, b) => a.date - b.date)[0];
+                    const mine = first.userId === 'user1' ? 'ant' : 'amy';
+                    L.marker([place.lat, place.lng], {
+                        interactive: false,
+                        icon: L.divIcon({
+                            className: '',
+                            html: `<div class="wrapped-pin wrapped-pin-${mine}"></div>`,
+                            iconSize: [14, 14],
+                            iconAnchor: [7, 7]
+                        })
+                    }).addTo(map);
+                }, 400 + i * 160));
+            });
+        });
+
+        wrap._cleanup = () => {
+            cancelAnimationFrame(raf);
+            timers.forEach(clearTimeout);
+            if (map) { map.remove(); map = null; }
+        };
+        return wrap;
+    }
+};
+
+const FURTHEST_SLIDE = {
+    id: 'furthest',
+    duration: 6000,
+    wash: ['#f59e0b', '#0ea5e9'],
+    skip: (stats) => !stats.both.places.some((p) => p.isTrip),
+    images: (stats) => {
+        const trip = stats.both.places.find((p) => p.isTrip);
+        const withPhoto = trip && trip.logs.find((l) => l.photoUrl);
+        return withPhoto ? [withPhoto.photoUrl] : [];
+    },
+    render(stats) {
+        const trips = stats.both.places.filter((p) => p.isTrip); // already furthest-first
+        const top = trips[0];
+        const first = top.logs.slice().sort((a, b) => a.date - b.date)[0];
+        const photo = top.logs.find((l) => l.photoUrl);
+
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'Furthest from home'));
+
+        if (photo) {
+            const row = el('div', 'wrapped-polaroids');
+            const card = el('div', 'wrapped-polaroid');
+            card.style.setProperty('--rot', `${seedRotation(photo.id)}deg`);
+            card.style.width = '190px';
+            card.style.animationDelay = '300ms';
+            const img = el('img');
+            img.src = photo.photoUrl;
+            img.alt = '';
+            card.append(img, el('div', 'wrapped-cap', `${esc(top.name)} &middot; ${fmtDayMonth(photo.date)}`));
+            row.append(card);
+            wrap.append(row);
+        }
+
+        wrap.append(delay(el('div', 'wrapped-big wrapped-rise', esc(top.name)), 200));
+        wrap.append(delay(el('div', 'wrapped-mid wrapped-rise',
+            `<strong>${fmt(top.km)} km</strong> from Wrexham`), 350));
+        wrap.append(delay(el('div', 'wrapped-sub wrapped-rise',
+            `${esc(stats.names[first.userId])} &middot; ${fmtDate(first.date)}`), 500));
+
+        if (trips.length > 1) {
+            const rest = trips.slice(1, 3)
+                .map((t) => `${esc(t.name)} <span style="opacity:.55">${fmt(t.km)} km</span>`)
+                .join(' &middot; ');
+            wrap.append(delay(el('div', 'wrapped-sub wrapped-rise', `Also: ${rest}`), 700));
+        }
+        return wrap;
+    }
+};
+
+const PASSPORT_SLIDE = {
+    id: 'passport',
+    duration: 7000,
+    wash: ['#9333ea', '#f59e0b'],
+    skip: (stats) => !stats.user1.milestones.length && !stats.user2.milestones.length,
+    render(stats) {
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'Stamps this year'));
+
+        // One stamp per place reached, whoever got there. The crown goes to
+        // whoever arrived first.
+        const byPlace = new Map();
+        ['user1', 'user2'].forEach((uid) => {
+            stats[uid].milestones.forEach((m) => {
+                const entry = byPlace.get(m.steps) || { label: m.label, steps: m.steps, who: [] };
+                entry.who.push({ uid, date: m.date, first: m.first });
+                byPlace.set(m.steps, entry);
+            });
+        });
+        const stamps = [...byPlace.values()].sort((a, b) => a.steps - b.steps);
+
+        const grid = el('div', 'wrapped-stamps');
+        stamps.slice(0, 12).forEach((stamp, i) => {
+            const node = el('div', 'wrapped-stamp');
+            node.style.animationDelay = `${250 + i * 70}ms`;
+            const earliest = stamp.who.slice().sort((a, b) => a.date - b.date)[0];
+            // An emoji ignores `color`, so the crown alone can't say who got here
+            // first. The dot beside it carries that, in the same green and purple
+            // the rest of the show uses, and the line underneath names them both.
+            const dotClass = earliest.uid === 'user1' ? 'wrapped-pin-ant' : 'wrapped-pin-amy';
+            node.innerHTML = `<div class="wrapped-stamp-crown">👑<i class="wrapped-stamp-dot ${dotClass}"
+                title="${esc(stats.names[earliest.uid])} got here first"></i></div>
+                <div>${esc(stamp.label)}</div>
+                <div class="wrapped-stamp-when">${fmtDate(earliest.date)}</div>`;
+            grid.append(node);
+        });
+        wrap.append(grid);
+        if (stamps.length > 12) {
+            wrap.append(el('div', 'wrapped-hint', `and ${stamps.length - 12} more`));
+        }
+
+        const firsts = {
+            user1: stats.user1.milestones.filter((m) => m.first).length,
+            user2: stats.user2.milestones.filter((m) => m.first).length
+        };
+        wrap.append(delay(el('div', 'wrapped-sub wrapped-rise',
+            `<span class="wrapped-ant">${esc(stats.names.user1)}</span> got there first ${firsts.user1} ${firsts.user1 === 1 ? 'time' : 'times'},
+             <span class="wrapped-amy">${esc(stats.names.user2)}</span> ${firsts.user2}.`), 900));
+        return wrap;
+    }
+};
+
+const AWARDS_SLIDE = {
+    id: 'awards',
+    duration: 8000,
+    wash: ['#f59e0b', '#9333ea'],
+    skip: (stats) => stats.both.total === 0,
+    render(stats) {
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'Awards'));
+        const cols = el('div', 'wrapped-cols');
+        ['user1', 'user2'].forEach((uid) => {
+            const colour = uid === 'user1' ? 'wrapped-ant' : 'wrapped-amy';
+            const col = el('div');
+            col.append(el('div', `wrapped-col-head ${colour}`, esc(stats.names[uid])));
+            stats.awards[uid].forEach((award, i) => {
+                const node = el('div', 'wrapped-award',
+                    `<span class="wrapped-award-emoji">${award.emoji}</span>
+                     <span><span class="wrapped-award-label">${esc(award.label)}</span>
+                     <span class="wrapped-award-detail">${esc(award.detail)}</span></span>`);
+                node.style.animationDelay = `${250 + i * 180}ms`;
+                col.append(node);
+            });
+            cols.append(col);
+        });
+        wrap.append(cols);
+        return wrap;
+    }
+};
+
 // Each month gets its own colour pair, so twelve chapters don't blur into one.
 const MONTH_WASHES = [
     ['#f59e0b', '#9333ea'], ['#6366f1', '#22c55e'], ['#0ea5e9', '#a855f7'],
@@ -1107,6 +1307,10 @@ export function buildSlides(stats) {
         RACE_SLIDE,
         BEST_DAYS_SLIDE,
         HABITS_SLIDE,
+        PLACES_SLIDE,
+        FURTHEST_SLIDE,
+        PASSPORT_SLIDE,
+        AWARDS_SLIDE,
         FINALE_SLIDE
     ];
 }
