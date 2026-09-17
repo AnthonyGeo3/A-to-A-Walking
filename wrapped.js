@@ -834,87 +834,102 @@ const RACE_AMY = '#a855f7';
 
 let raceClipSeq = 0;
 
+// The gap between them, drawn once and used by both the show and the recap, so
+// the two can't end up telling different stories.
+//
+// Plotting both cumulative totals as two climbing lines looks impressive and
+// says almost nothing: over a year they sit on top of each other, and a
+// 30,000-step day is about one per cent of the height, so the big days the
+// chart exists to show simply don't register. What "who's winning, and what did
+// the big days do" actually asks for is the gap — one series, diverging either
+// side of a neutral zero line. Lead changes are the crossings and a big day is
+// a visible kink.
+export function raceSvg(stats, { height = 190 } = {}) {
+    const days = stats.race.days;
+    if (!days.length) return '';
+    const gaps = days.map((d) => d.cum.user1 - d.cum.user2);
+    const maxAbs = Math.max(1, ...gaps.map(Math.abs));
+
+    const W = 340, H = height, padL = 4, padR = 4, padT = 16, padB = 22;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const zeroY = padT + plotH / 2;
+    const xAt = (i) => padL + (i / Math.max(1, days.length - 1)) * plotW;
+    const yAt = (gap) => zeroY - (gap / maxAbs) * (plotH / 2);
+
+    const line = gaps.map((g, i) => `${i ? 'L' : 'M'}${xAt(i).toFixed(1)},${yAt(g).toFixed(1)}`).join('');
+    const area = `M${xAt(0).toFixed(1)},${zeroY.toFixed(1)}${line.slice(1)}L${xAt(days.length - 1).toFixed(1)},${zeroY.toFixed(1)}Z`;
+
+    // Unique per call, so a replay can't collide with a definition left in the
+    // document by the last one.
+    const uid = `wr${++raceClipSeq}`;
+
+    const crossings = stats.race.leadChanges.map((c) => {
+        const i = days.findIndex((d) => d.date.getTime() === c.date.getTime());
+        return i < 0 ? '' :
+            `<line class="wrapped-race-tick" x1="${xAt(i).toFixed(1)}" y1="${padT}" x2="${xAt(i).toFixed(1)}" y2="${padT + plotH}"/>
+             <circle class="wrapped-race-tick-dot" cx="${xAt(i).toFixed(1)}" cy="${zeroY.toFixed(1)}" r="3"/>`;
+    }).join('');
+
+    const axisLabels = days.map((d, i) => ({ d, i }))
+        .filter(({ d }) => d.date.getDate() === 1 && [9, 0, 3, 6].includes(d.date.getMonth()))
+        .map(({ d, i }) => `<text class="wrapped-race-axis-label" x="${xAt(i).toFixed(1)}" y="${H - 7}" text-anchor="middle">${d.date.toLocaleDateString('en-GB', { month: 'short' })}</text>`)
+        .join('');
+
+    return `<svg class="wrapped-race" viewBox="0 0 ${W} ${H}" role="img"
+         aria-label="How far ahead ${esc(stats.names.user1)} or ${esc(stats.names.user2)} was, through the year">
+        <defs>
+            <clipPath id="${uid}-up"><rect x="0" y="0" width="${W}" height="${zeroY.toFixed(1)}"/></clipPath>
+            <clipPath id="${uid}-down"><rect x="0" y="${zeroY.toFixed(1)}" width="${W}" height="${(H - zeroY).toFixed(1)}"/></clipPath>
+        </defs>
+        <g class="wrapped-race-reveal">
+            <path d="${area}" fill="${RACE_ANT}" fill-opacity="0.45" clip-path="url(#${uid}-up)"/>
+            <path d="${area}" fill="${RACE_AMY}" fill-opacity="0.45" clip-path="url(#${uid}-down)"/>
+            <path class="wrapped-race-edge" d="${line}"/>
+            ${crossings}
+        </g>
+        <line class="wrapped-race-axis" x1="${padL}" y1="${zeroY.toFixed(1)}" x2="${padL + plotW}" y2="${zeroY.toFixed(1)}"/>
+        <text class="wrapped-race-pole" x="${padL + 2}" y="${padT + 8}" fill="${RACE_ANT}">${esc(stats.names.user1)} ahead</text>
+        <text class="wrapped-race-pole" x="${padL + 2}" y="${(padT + plotH - 2).toFixed(1)}" fill="${RACE_AMY}">${esc(stats.names.user2)} ahead</text>
+        ${axisLabels}
+    </svg>`;
+}
+
+// The sentences that go with the chart, in both places.
+export function raceSummary(stats) {
+    const days = stats.race.days;
+    const maxAbs = days.length
+        ? Math.max(0, ...days.map((d) => Math.abs(d.cum.user1 - d.cum.user2)))
+        : 0;
+    const changeCount = stats.race.leadChanges.length;
+    const out = [changeCount === 0
+        ? 'The lead never changed hands.'
+        : `Lead changed hands <strong>${changeCount}</strong> ${changeCount === 1 ? 'time' : 'times'}.`];
+    out.push(`${esc(stats.names.user1)} led for ${fmt(stats.race.daysInLead.user1)} days, ${esc(stats.names.user2)} for ${fmt(stats.race.daysInLead.user2)}.`);
+    if (stats.race.biggestSwing) {
+        const sw = stats.race.biggestSwing;
+        out.push(`Biggest day's swing: ${fmtDate(sw.date)}, ${esc(stats.names[sw.uid])} by ${fmt(sw.by)}.`);
+    }
+    out.push(`Furthest apart: ${fmt(maxAbs)} steps.`);
+    return out;
+}
+
+export function raceTitle(stats) {
+    const n = stats.race.leadChanges.length;
+    return n === 0 ? 'A runaway' : n < 3 ? 'It changed hands' : 'Neck and neck';
+}
+
 const RACE_SLIDE = {
     id: 'race',
     duration: 10000,
     wash: ['#0ea5e9', '#9333ea'],
     skip: (stats) => stats.both.total === 0,
     render(stats) {
-        // Plotting both cumulative totals as two climbing lines looks impressive
-        // and says almost nothing: over a year they sit on top of each other, and
-        // a 30,000-step day is one per cent of the height, so the big days the
-        // chart is supposed to show simply don't register. What the question
-        // "who's winning, and what did the big days do" actually asks for is the
-        // gap between them over time — one series, diverging either side of a
-        // neutral zero line. Lead changes are the crossings, and a big day is a
-        // visible kink instead of an invisible one.
-        const days = stats.race.days;
-        const gaps = days.map((d) => d.cum.user1 - d.cum.user2);
-        const maxAbs = Math.max(1, ...gaps.map(Math.abs));
-
-        const W = 340, H = 190, padL = 4, padR = 4, padT = 16, padB = 22;
-        const plotW = W - padL - padR;
-        const plotH = H - padT - padB;
-        const zeroY = padT + plotH / 2;
-        const xAt = (i) => padL + (i / Math.max(1, days.length - 1)) * plotW;
-        const yAt = (gap) => zeroY - (gap / maxAbs) * (plotH / 2);
-
-        const line = gaps.map((g, i) => `${i ? 'L' : 'M'}${xAt(i).toFixed(1)},${yAt(g).toFixed(1)}`).join('');
-        const area = `M${xAt(0).toFixed(1)},${zeroY.toFixed(1)}${line.slice(1)}L${xAt(days.length - 1).toFixed(1)},${zeroY.toFixed(1)}Z`;
-
-        // Unique per mount, so replaying the show can't collide with a stale
-        // definition still in the document.
-        const uid = `wr${++raceClipSeq}`;
-
-        const crossings = stats.race.leadChanges.map((c) => {
-            const i = days.findIndex((d) => d.date.getTime() === c.date.getTime());
-            return i < 0 ? '' :
-                `<line class="wrapped-race-tick" x1="${xAt(i).toFixed(1)}" y1="${padT}" x2="${xAt(i).toFixed(1)}" y2="${padT + plotH}"/>
-                 <circle class="wrapped-race-tick-dot" cx="${xAt(i).toFixed(1)}" cy="${zeroY.toFixed(1)}" r="3"/>`;
-        }).join('');
-
-        const axisLabels = days.map((d, i) => ({ d, i }))
-            .filter(({ d }) => d.date.getDate() === 1 && [9, 0, 3, 6].includes(d.date.getMonth()))
-            .map(({ d, i }) => `<text class="wrapped-race-axis-label" x="${xAt(i).toFixed(1)}" y="${H - 7}" text-anchor="middle">${d.date.toLocaleDateString('en-GB', { month: 'short' })}</text>`)
-            .join('');
-
-        const changeCount = stats.race.leadChanges.length;
-        const title = changeCount === 0 ? 'A runaway'
-            : changeCount < 3 ? 'It changed hands' : 'Neck and neck';
-
         const wrap = el('div');
         wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'The race'));
-        wrap.append(delay(el('div', 'wrapped-big wrapped-rise', title), 150));
-        wrap.append(el('div', 'wrapped-rise', `
-            <svg class="wrapped-race" viewBox="0 0 ${W} ${H}" role="img"
-                 aria-label="How far ahead ${esc(stats.names.user1)} or ${esc(stats.names.user2)} was, through the year">
-                <defs>
-                    <clipPath id="${uid}-up"><rect x="0" y="0" width="${W}" height="${zeroY.toFixed(1)}"/></clipPath>
-                    <clipPath id="${uid}-down"><rect x="0" y="${zeroY.toFixed(1)}" width="${W}" height="${(H - zeroY).toFixed(1)}"/></clipPath>
-                </defs>
-                <g class="wrapped-race-reveal">
-                    <path d="${area}" fill="${RACE_ANT}" fill-opacity="0.45" clip-path="url(#${uid}-up)"/>
-                    <path d="${area}" fill="${RACE_AMY}" fill-opacity="0.45" clip-path="url(#${uid}-down)"/>
-                    <path class="wrapped-race-edge" d="${line}"/>
-                    ${crossings}
-                </g>
-                <line class="wrapped-race-axis" x1="${padL}" y1="${zeroY.toFixed(1)}" x2="${padL + plotW}" y2="${zeroY.toFixed(1)}"/>
-                <text class="wrapped-race-pole" x="${padL + 2}" y="${padT + 8}" fill="${RACE_ANT}">${esc(stats.names.user1)} ahead</text>
-                <text class="wrapped-race-pole" x="${padL + 2}" y="${(padT + plotH - 2).toFixed(1)}" fill="${RACE_AMY}">${esc(stats.names.user2)} ahead</text>
-                ${axisLabels}
-            </svg>`));
-
-        const lines = [];
-        lines.push(changeCount === 0
-            ? 'The lead never changed hands.'
-            : `Lead changed hands <strong>${changeCount}</strong> ${changeCount === 1 ? 'time' : 'times'}.`);
-        lines.push(`${esc(stats.names.user1)} led for ${fmt(stats.race.daysInLead.user1)} days, ${esc(stats.names.user2)} for ${fmt(stats.race.daysInLead.user2)}.`);
-        if (stats.race.biggestSwing) {
-            const sw = stats.race.biggestSwing;
-            lines.push(`Biggest day's swing: ${fmtDate(sw.date)}, ${esc(stats.names[sw.uid])} by ${fmt(sw.by)}.`);
-        }
-        lines.push(`<span style="opacity:.6">Furthest apart: ${fmt(maxAbs)} steps.</span>`);
-        wrap.append(delay(el('div', 'wrapped-sub wrapped-rise', lines.join('<br>')), 2700));
+        wrap.append(delay(el('div', 'wrapped-big wrapped-rise', raceTitle(stats)), 150));
+        wrap.append(el('div', 'wrapped-rise', raceSvg(stats)));
+        wrap.append(delay(el('div', 'wrapped-sub wrapped-rise', raceSummary(stats).join('<br>')), 2700));
         return wrap;
     }
 };
@@ -1472,4 +1487,201 @@ export function openWrapped(stats, opts = {}) {
     show(0);
 
     return close;
+}
+
+// ---------------------------------------------------------------------------
+// The recap — the part of the year that stays on the page
+// ---------------------------------------------------------------------------
+// Built from the same stats object the show is, so the two can't disagree.
+
+const HEAT_ANT = '34, 197, 94';
+const HEAT_AMY = '168, 85, 247';
+
+function percentile(values, p) {
+    if (!values.length) return 0;
+    const sorted = values.slice().sort((a, b) => a - b);
+    const i = Math.min(sorted.length - 1, Math.max(0, Math.round((p / 100) * (sorted.length - 1))));
+    return sorted[i];
+}
+
+// A whole year at a glance: twelve rows, one per month, thirty-one columns.
+// GitHub's 53-column layout does not fit a portrait phone, and this one does.
+export function yearHeatmapHtml(stats) {
+    const days = stats.race.days;
+    if (!days.length) return '';
+
+    // One 40,000-step day would otherwise wash out the whole year, so the scale
+    // tops out at the 95th percentile rather than the maximum.
+    const all = [];
+    days.forEach((d) => {
+        if (d.day.user1 > 0) all.push(d.day.user1);
+        if (d.day.user2 > 0) all.push(d.day.user2);
+    });
+    const cap = Math.max(1, percentile(all, 95));
+
+    const byMonth = new Map();
+    days.forEach((d) => {
+        const mi = (d.date.getMonth() - 9 + 12) % 12;
+        if (!byMonth.has(mi)) byMonth.set(mi, []);
+        byMonth.get(mi).push(d);
+    });
+
+    const grid = (uid, rgb) => {
+        let html = '<div class="recap-heat">';
+        stats.months.forEach((month, mi) => {
+            const rows = byMonth.get(mi) || [];
+            html += `<div class="recap-heat-label">${esc(month.label.slice(0, 3))}</div>`;
+            for (let dayNum = 1; dayNum <= 31; dayNum++) {
+                const entry = rows.find((r) => r.date.getDate() === dayNum);
+                if (!entry) { html += '<div class="recap-heat-cell is-void"></div>'; continue; }
+                const steps = entry.day[uid];
+                const intensity = steps > 0 ? Math.max(0.16, Math.min(1, steps / cap)) : 0;
+                const bg = steps > 0 ? `rgba(${rgb}, ${intensity.toFixed(2)})` : '';
+                html += `<div class="recap-heat-cell" style="${bg ? `background:${bg}` : ''}"
+                    data-steps="${steps}" data-who="${esc(stats.names[uid])}"
+                    data-when="${esc(entry.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}"></div>`;
+            }
+        });
+        return html + '</div>';
+    };
+
+    return `
+        <div class="recap-heat-block">
+            <p class="recap-heat-name" style="color:#15803d">${esc(stats.names.user1)}</p>
+            ${grid('user1', HEAT_ANT)}
+        </div>
+        <div class="recap-heat-block">
+            <p class="recap-heat-name" style="color:#7e22ce">${esc(stats.names.user2)}</p>
+            ${grid('user2', HEAT_AMY)}
+        </div>
+        <p class="recap-heat-readout" data-readout>Tap a day</p>`;
+}
+
+/** The recap section's markup. Pure — no DOM, so it can be checked in node. */
+export function recapHtml(stats) {
+    const medals = ['🥇', '🥈', '🥉'];
+    const crown = (uid) => (stats.race.winner === uid ? ' 👑' : '');
+
+    const tiles = `
+        <div class="recap-tiles">
+            <div class="recap-tile">
+                <span class="recap-tile-value">${fmt(stats.both.total)}</span>
+                <span class="recap-tile-label">steps together</span>
+            </div>
+            <div class="recap-tile">
+                <span class="recap-tile-value" style="color:#15803d">${fmt(stats.user1.total)}${crown('user1')}</span>
+                <span class="recap-tile-label">${esc(stats.names.user1)}</span>
+            </div>
+            <div class="recap-tile">
+                <span class="recap-tile-value" style="color:#7e22ce">${fmt(stats.user2.total)}${crown('user2')}</span>
+                <span class="recap-tile-label">${esc(stats.names.user2)}</span>
+            </div>
+            <div class="recap-tile">
+                <span class="recap-tile-value">${fmt(stats.both.km)}</span>
+                <span class="recap-tile-label">km between you</span>
+            </div>
+        </div>`;
+
+    const bestDays = ['user1', 'user2'].map((uid) => `
+        <div>
+            <p class="recap-sub-name" style="color:${uid === 'user1' ? '#15803d' : '#7e22ce'}">${esc(stats.names[uid])}</p>
+            ${stats[uid].bestDays.length
+                ? stats[uid].bestDays.map((b, i) =>
+                    `<p class="recap-line">${medals[i]} <strong>${fmt(b.steps)}</strong>
+                     <span class="recap-dim">${fmtDayMonth(b.date)}</span></p>`).join('')
+                : '<p class="recap-line recap-dim">Nothing logged</p>'}
+        </div>`).join('');
+
+    const habits = ['user1', 'user2'].map((uid) => {
+        const u = stats[uid];
+        return `
+        <div>
+            <p class="recap-sub-name" style="color:${uid === 'user1' ? '#15803d' : '#7e22ce'}">${esc(stats.names[uid])}</p>
+            <p class="recap-line">${u.longest10kStreak.days > 0
+                ? `<strong>${u.longest10kStreak.days}</strong> days straight over 10k`
+                : 'No run over 10k'}</p>
+            <p class="recap-line"><strong>${fmt(u.daysLogged)}</strong> of ${stats.daysInYear} days logged</p>
+            ${u.bestWeekday ? `<p class="recap-line"><strong>${esc(u.bestWeekday.name)}s</strong> are the big day</p>` : ''}
+        </div>`;
+    }).join('');
+
+    const trips = stats.both.places.filter((p) => p.isTrip);
+    const places = stats.both.places.length ? `
+        <h4 class="recap-h">Places</h4>
+        <p class="recap-line"><strong>${stats.both.places.length}</strong> places${stats.both.countries.length > 1 ? ` in <strong>${stats.both.countries.length}</strong> countries` : ''}</p>
+        ${trips.length ? `<p class="recap-line">Furthest: <strong>${esc(trips[0].name)}</strong> <span class="recap-dim">${fmt(trips[0].km)} km from Wrexham</span></p>` : ''}
+        ${trips.length > 1 ? `<p class="recap-line recap-dim">Also ${trips.slice(1, 4).map((t) => esc(t.name)).join(', ')}</p>` : ''}` : '';
+
+    const stampCount = new Set([...stats.user1.milestones, ...stats.user2.milestones].map((m) => m.steps)).size;
+    const stamps = stampCount ? `
+        <h4 class="recap-h">Stamps this year</h4>
+        <p class="recap-line"><strong>${stampCount}</strong> places reached ·
+           ${esc(stats.names.user1)} first ${stats.user1.milestones.filter((m) => m.first).length}×,
+           ${esc(stats.names.user2)} first ${stats.user2.milestones.filter((m) => m.first).length}×</p>` : '';
+
+    const awards = `
+        <h4 class="recap-h">Awards</h4>
+        <div class="recap-two">
+            ${['user1', 'user2'].map((uid) => `
+                <div>
+                    <p class="recap-sub-name" style="color:${uid === 'user1' ? '#15803d' : '#7e22ce'}">${esc(stats.names[uid])}</p>
+                    ${stats.awards[uid].map((a) => `<p class="recap-line">${a.emoji} <strong>${esc(a.label)}</strong><br><span class="recap-dim">${esc(a.detail)}</span></p>`).join('')}
+                </div>`).join('')}
+        </div>`;
+
+    return `
+        <button type="button" class="recap-play">▶ Play ${esc(yearWord(stats.year))} Wrapped</button>
+        ${tiles}
+        <div class="recap-more" hidden>
+            <h4 class="recap-h">The year, day by day</h4>
+            ${yearHeatmapHtml(stats)}
+
+            <h4 class="recap-h">The race · ${esc(raceTitle(stats))}</h4>
+            <div class="recap-race">${raceSvg(stats, { height: 150 })}</div>
+            <p class="recap-line">${raceSummary(stats).join('<br>')}</p>
+
+            <h4 class="recap-h">Best days</h4>
+            <div class="recap-two">${bestDays}</div>
+
+            <h4 class="recap-h">The habit</h4>
+            <div class="recap-two">${habits}</div>
+
+            ${places}
+            ${stamps}
+            ${awards}
+        </div>
+        <button type="button" class="recap-toggle">Show more ▼</button>
+        <p class="recap-foot">Figures are live — a walk logged late still lands in the year it belongs to.</p>`;
+}
+
+/** Render the recap into a host element and wire its three interactions. */
+export function mountRecap(host, stats, { onPlay } = {}) {
+    host.innerHTML = recapHtml(stats);
+    host.classList.add('recap');
+
+    const play = host.querySelector('.recap-play');
+    if (play && typeof onPlay === 'function') play.addEventListener('click', () => onPlay(stats.year));
+
+    const more = host.querySelector('.recap-more');
+    const toggle = host.querySelector('.recap-toggle');
+    if (more && toggle) {
+        toggle.addEventListener('click', () => {
+            const open = !more.hidden;
+            more.hidden = open;
+            toggle.textContent = open ? 'Show more ▼' : 'Show less ▲';
+        });
+    }
+
+    // Same one-line readout the month heatmap on the main page uses — there is no
+    // room for a number in a cell this small.
+    const readout = host.querySelector('[data-readout]');
+    if (readout) {
+        host.addEventListener('click', (e) => {
+            const cell = e.target.closest('.recap-heat-cell');
+            if (!cell || !cell.dataset.when) return;
+            const steps = Number(cell.dataset.steps) || 0;
+            readout.textContent = `${cell.dataset.who} · ${cell.dataset.when} · ${steps > 0 ? `${fmt(steps)} steps` : 'no steps'}`;
+        });
+    }
+    return host;
 }

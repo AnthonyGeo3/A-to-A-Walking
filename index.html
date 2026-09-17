@@ -392,6 +392,12 @@
             </button>
         </div>
 
+        <!-- Year Recap — appears once a challenge year is over, and stays -->
+        <div id="wrapped-recap-section" class="section-tinted rounded-xl p-4 mb-8 hidden">
+            <h2 id="wrapped-recap-heading" class="text-xl font-bold text-center mb-4">📖 Recap</h2>
+            <div id="wrapped-recap"></div>
+        </div>
+
         <!-- Stretch Goals -->
         <div class="section-tinted rounded-xl p-4 mb-8">
             <h2 class="text-xl font-bold text-center mb-4">Stretch Goals</h2>
@@ -486,7 +492,7 @@
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-        import { computeWrapped, openWrapped, wrappedYears, yearWord,
+        import { computeWrapped, openWrapped, wrappedYears, yearWord, mountRecap,
                  CHALLENGE_START_YEAR, challengeYearStart, challengeYearEnd } from './wrapped.js';
 
         // --- ⚙️ CHALLENGE DATA ---
@@ -2265,10 +2271,26 @@
                     }
                 },
                 onRecap: () => {
-                    const section = document.getElementById('wrapped-recap');
+                    // Scroll to the section, not its contents, so the heading is
+                    // the first thing on screen.
+                    const section = document.getElementById('wrapped-recap-section');
                     if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             });
+        }
+
+        // The recap stays on the page for good once a year is done — it is where
+        // you go back to it, long after the banner has been dismissed.
+        function renderWrappedRecap() {
+            const section = document.getElementById('wrapped-recap-section');
+            const host = document.getElementById('wrapped-recap');
+            if (!section || !host) return;
+            const n = latestWrappedYear();
+            if (n == null || !logData.length) { section.classList.add('hidden'); return; }
+            section.classList.remove('hidden');
+            document.getElementById('wrapped-recap-heading').textContent = `📖 ${yearWord(n)} Recap`;
+            // Rebuilt from the live logs, so it can never drift from the show.
+            mountRecap(host, buildWrappedStats(n), { onPlay: playWrapped });
         }
 
         function renderWrappedBanner() {
@@ -2322,6 +2344,7 @@
             renderHighScores();
             renderMap();
             renderWrappedBanner();
+            renderWrappedRecap();
             maybeAutoPlayWrapped();
         }
 

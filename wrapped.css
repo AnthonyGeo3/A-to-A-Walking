@@ -504,3 +504,112 @@ body.wrapped-lock { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
     .wrapped-pin, .wrapped-stamp, .wrapped-award { opacity: 1; animation: none; transform: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   The recap — this one lives on the main page, in daylight, so it uses the
+   app's light surfaces rather than the show's dark ones.
+   --------------------------------------------------------------------------- */
+
+.recap { display: block; }
+.recap-play {
+    display: block;
+    width: 100%;
+    border: 0;
+    cursor: pointer;
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(120deg, #0b0f1a 0%, #1b2440 55%, #3b1d5e 100%);
+    box-shadow: 0 6px 18px rgba(11, 15, 26, 0.24);
+}
+.recap-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+}
+.recap-tile {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 10px;
+    padding: 9px 10px;
+    text-align: center;
+}
+.recap-tile-value {
+    display: block;
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: #374151;
+}
+.recap-tile-label { display: block; font-size: 10px; color: #9ca3af; margin-top: 1px; }
+
+.recap-h {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin: 18px 0 7px;
+}
+.recap-line { font-size: 12px; color: #4b5563; line-height: 1.55; }
+.recap-dim { color: #9ca3af; }
+.recap-sub-name { font-size: 11px; font-weight: 800; margin-bottom: 3px; }
+.recap-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.recap-toggle {
+    width: 100%;
+    margin-top: 14px;
+    padding: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #6b7280;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 9px;
+    cursor: pointer;
+}
+.recap-toggle:hover { color: #374151; }
+.recap-foot { font-size: 10px; color: #9ca3af; text-align: center; margin-top: 8px; }
+
+/* --- the year as a grid --------------------------------------------------- */
+/* Twelve rows and thirty-one columns. GitHub's 53-column layout does not fit a
+   portrait phone; this does, and a month still reads as a row. */
+.recap-heat-block { margin-bottom: 10px; }
+.recap-heat-name { font-size: 10px; font-weight: 800; margin-bottom: 3px; }
+.recap-heat {
+    display: grid;
+    grid-template-columns: 26px repeat(31, 1fr);
+    gap: 2px;
+    align-items: center;
+}
+.recap-heat-label { font-size: 8px; font-weight: 700; color: #9ca3af; }
+.recap-heat-cell {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    background: #f1f2f4;
+    cursor: pointer;
+}
+/* A 31st column in a 30-day month has no day to stand for. */
+.recap-heat-cell.is-void { background: transparent; cursor: default; }
+.recap-heat-readout {
+    font-size: 10px;
+    color: #6b7280;
+    text-align: center;
+    min-height: 14px;
+    margin-top: 2px;
+}
+
+/* --- the race, in daylight ------------------------------------------------ */
+/* The series colours are the same validated pair as the show; only the neutral
+   chrome changes, because the surface did. */
+.recap-race { margin-top: 4px; }
+.recap-race .wrapped-race-edge { stroke: rgba(17, 24, 39, 0.55); }
+.recap-race .wrapped-race-axis { stroke: rgba(17, 24, 39, 0.22); }
+.recap-race .wrapped-race-tick { stroke: rgba(17, 24, 39, 0.3); }
+.recap-race .wrapped-race-tick-dot { fill: rgba(17, 24, 39, 0.55); }
+.recap-race .wrapped-race-axis-label { fill: #9ca3af; }
+/* No reveal here: the recap is a page you scroll to, not a slide that plays. */
+.recap-race .wrapped-race-reveal { animation: none; clip-path: none; }
