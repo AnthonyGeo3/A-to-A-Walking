@@ -495,7 +495,8 @@ test('the running order runs cover, big number, months, race, finale', () => {
     assert.deepEqual(slides.map((s) => s.id), [
         'cover', 'bigNumber',
         ...Array.from({ length: 12 }, (_, i) => `month-${i}`),
-        'race', 'bestDays', 'habits', 'places', 'furthest', 'passport', 'awards', 'finale'
+        'race', 'bestDays', 'habits', 'places', 'furthest', 'passport',
+        'quotes', 'awards', 'photoWall', 'stretch', 'finale'
     ]);
 });
 
@@ -503,7 +504,7 @@ test('slides that have nothing to show drop out', () => {
     const empty = computeWrapped([], 1, OPTS);
     const kept = buildSlides(empty).filter((s) => !s.skip || !s.skip(empty));
     assert.deepEqual(kept.map((s) => s.id), ['cover', 'bigNumber', 'finale'],
-        'no months, no race, no best days, habits, places, trips, stamps or awards');
+        'nothing to chapter, race, rank, map, stamp, quote, award or photograph');
 });
 
 test('the map slide steps aside when there is no map library', () => {
@@ -603,6 +604,53 @@ test('month slides declare the photos to preload', () => {
     ]);
     // A month with no photos asks for nothing.
     assert.deepEqual(buildSlides(w).find((s) => s.id === 'month-1').images(w), []);
+});
+
+test('quotes, the wall and goals stand down when there is too little', () => {
+    const w = wrapped();
+    const find = (id, stats) => buildSlides(stats).find((s) => s.id === id);
+
+    // The fixture has four notes and nine photos, so all three play.
+    assert.equal(find('quotes', w).skip(w), false);
+    assert.equal(find('photoWall', w).skip(w), false);
+    assert.equal(find('stretch', w).skip(w), false);
+
+    // A single note is a stray caption, not a chapter.
+    const oneNote = computeWrapped(
+        buildFixture().map((l) => (l.id === 'u1-2025-10-20' ? l : { ...l, note: undefined })), 1, OPTS);
+    assert.equal(find('quotes', oneNote).skip(oneNote), true);
+
+    // Three photos is not a wall.
+    const fewPhotos = computeWrapped(
+        buildFixture().map((l, i) => (i % 200 === 0 ? l : { ...l, photoUrl: undefined })), 1, OPTS);
+    assert.ok(fewPhotos.both.photoCount < 4);
+    assert.equal(find('photoWall', fewPhotos).skip(fewPhotos), true);
+
+    // No goals set, no goals slide.
+    const noGoals = computeWrapped(buildFixture(), 1, { ...OPTS, stretch: {} });
+    assert.equal(find('stretch', noGoals).skip(noGoals), true);
+
+    // A goal that exists but has had no progress at all is nothing to report.
+    const nothingWalked = computeWrapped([], 1, OPTS);
+    assert.ok(nothingWalked.user1.stretch, 'the goal is still there');
+    assert.equal(nothingWalked.user1.stretch.pct, 0);
+    assert.equal(find('stretch', nothingWalked).skip(nothingWalked), true);
+});
+
+test('the photo wall is capped and spread across the year', () => {
+    const many = buildFixture().map((l, i) =>
+        (l.userId === 'user1' && i % 3 === 0 ? { ...l, photoUrl: `https://example.test/${l.id}.jpg` } : l));
+    const w = computeWrapped(many, 1, OPTS);
+    assert.ok(w.both.photoCount > 100, `${w.both.photoCount} photos in the year`);
+
+    const wall = buildSlides(w).find((s) => s.id === 'photoWall').images(w);
+    assert.equal(wall.length, 24, 'capped rather than all of them');
+    assert.equal(new Set(wall).size, 24, 'no duplicates');
+
+    // Taken evenly across the year rather than all from one month.
+    const shown = w.user1.photos.list.filter((l) => wall.includes(l.photoUrl));
+    const months = new Set(shown.map((l) => l.date.getMonth()));
+    assert.ok(months.size >= 8, `spread over ${months.size} months`);
 });
 
 test('year names read as words', () => {

@@ -743,7 +743,7 @@ const COVER_SLIDE = {
         id: 'cover',
         duration: Infinity, // waits for a tap: nothing plays before she's looking
         wash: ['#22c55e', '#9333ea'],
-        render(stats, ctx) {
+        render(stats) {
             const lastDay = new Date(stats.end.getTime() - 86400000);
             const wrap = el('div');
             wrap.append(
@@ -752,7 +752,7 @@ const COVER_SLIDE = {
                 delay(el('div', 'wrapped-sub wrapped-rise', `${fmtDate(stats.start)} — ${fmtDate(lastDay)}`), 350),
                 delay(el('div', 'wrapped-mid wrapped-rise',
                     `<span class="wrapped-ant">${esc(stats.names.user1)}</span> <span style="opacity:.5">&amp;</span> <span class="wrapped-amy">${esc(stats.names.user2)}</span>`), 500),
-                delay(el('div', 'wrapped-hint wrapped-rise', ctx.reduced ? 'Tap to begin' : 'Tap to begin'), 900)
+                delay(el('div', 'wrapped-hint wrapped-rise', 'Tap to begin'), 900)
             );
             return wrap;
         }
@@ -1220,6 +1220,125 @@ const AWARDS_SLIDE = {
     }
 };
 
+const QUOTES_SLIDE = {
+    id: 'quotes',
+    duration: 8000,
+    wash: ['#6366f1', '#ec4899'],
+    // One note on its own isn't a chapter of the year, it's a stray caption.
+    skip: (stats) => stats.user1.notes.length + stats.user2.notes.length < 2,
+    render(stats) {
+        // Longer notes said more, and a note on a big day usually came with a
+        // story. Alternate so it isn't one person's diary.
+        const queue = {};
+        ['user1', 'user2'].forEach((uid) => {
+            queue[uid] = stats[uid].notes.slice()
+                .map((n) => ({ note: n, score: n.note.length + n.steps / 1000 }))
+                .sort((a, b) => b.score - a.score || byIdAsc(a.note, b.note));
+        });
+        const picks = [];
+        let turn = (queue.user1[0]?.score || -1) >= (queue.user2[0]?.score || -1) ? 'user1' : 'user2';
+        while (picks.length < 4 && (queue.user1.length || queue.user2.length)) {
+            const other = turn === 'user1' ? 'user2' : 'user1';
+            const from = queue[turn].length ? turn : other;
+            picks.push(queue[from].shift().note);
+            turn = from === 'user1' ? 'user2' : 'user1';
+        }
+
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'In your own words'));
+        const list = el('div', 'wrapped-quotes');
+        picks.forEach((n, i) => {
+            const colour = n.userId === 'user1' ? 'wrapped-ant' : 'wrapped-amy';
+            const node = el('div', 'wrapped-pull',
+                `<div class="wrapped-pull-text">&ldquo;${esc(n.note)}&rdquo;</div>
+                 <span class="wrapped-pull-who ${colour}">${esc(stats.names[n.userId])} &middot; ${fmtDayMonth(n.date)}</span>`);
+            node.style.animationDelay = `${250 + i * 400}ms`;
+            list.append(node);
+        });
+        wrap.append(list);
+        return wrap;
+    }
+};
+
+const PHOTO_WALL_SLIDE = {
+    id: 'photoWall',
+    duration: 8000,
+    wash: ['#0ea5e9', '#f59e0b'],
+    // Fewer than four and it isn't a wall.
+    skip: (stats) => stats.both.photoCount < 4,
+    images: (stats) => wallPhotos(stats).map((l) => l.photoUrl),
+    render(stats) {
+        const photos = wallPhotos(stats);
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', `${fmt(stats.both.photoCount)} photos`));
+        const wall = el('div', 'wrapped-wall');
+        // Spread the cascade across about four seconds however many there are.
+        const step = Math.min(160, 4000 / Math.max(1, photos.length));
+        photos.forEach((log, i) => {
+            const card = el('div', 'wrapped-polaroid');
+            card.style.setProperty('--rot', `${seedRotation(log.id, 9)}deg`);
+            card.style.width = '56px';
+            card.style.zIndex = String(10 + (i % 7));
+            card.style.animationDelay = `${300 + i * step}ms`;
+            const img = el('img');
+            img.src = log.photoUrl;
+            img.alt = '';
+            card.append(img);
+            wall.append(card);
+        });
+        wrap.append(wall);
+        wrap.append(delay(el('div', 'wrapped-sub wrapped-rise', 'A year of looking up'), 4400));
+        return wrap;
+    }
+};
+
+// Capped so the wall stays a wall rather than a scroll, and taken evenly across
+// the year rather than all from the month someone got a new phone.
+function wallPhotos(stats) {
+    const all = [...stats.user1.photos.list, ...stats.user2.photos.list]
+        .sort((a, b) => a.date - b.date || byIdAsc(a, b));
+    const cap = 24;
+    if (all.length <= cap) return all;
+    const stride = all.length / cap;
+    return Array.from({ length: cap }, (_, i) => all[Math.floor(i * stride)]);
+}
+
+const STRETCH_SLIDE = {
+    id: 'stretch',
+    duration: 6000,
+    wash: ['#f59e0b', '#22c55e'],
+    // A goal with no progress against it at all has nothing to report. The goal
+    // sits on the all-time total, so in later years it may already be done.
+    skip: (stats) => !['user1', 'user2'].some((uid) => {
+        const goal = stats[uid].stretch;
+        return goal && (goal.done || goal.pct > 0);
+    }),
+    render(stats) {
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'The goals you set yourselves'));
+        const list = delay(el('div', 'wrapped-rise'), 250);
+
+        ['user1', 'user2'].forEach((uid) => {
+            const goal = stats[uid].stretch;
+            if (!goal) return;
+            const colour = uid === 'user1' ? RACE_ANT : RACE_AMY;
+            const note = goal.done
+                ? `Smashed it &middot; ${fmtDate(goal.crossedOn)}`
+                : `${Math.round(goal.pct)}% of the way there`;
+            list.append(el('div', 'wrapped-goal', `
+                <span class="wrapped-goal-reward">${esc(goal.reward)}</span>
+                <span class="wrapped-goal-body">
+                    <span class="wrapped-goal-label">${esc(goal.label)}</span>
+                    <span class="wrapped-goal-note">${esc(stats.names[uid])} &middot; ${fmt(goal.steps)} &middot; ${note}</span>
+                    <span class="wrapped-goal-bar"><span style="width:${Math.min(100, goal.pct).toFixed(1)}%;background:${colour}"></span></span>
+                </span>
+                <span>${goal.done ? '✅' : ''}</span>`));
+        });
+        wrap.append(list);
+        return wrap;
+    }
+};
+
 // Each month gets its own colour pair, so twelve chapters don't blur into one.
 const MONTH_WASHES = [
     ['#f59e0b', '#9333ea'], ['#6366f1', '#22c55e'], ['#0ea5e9', '#a855f7'],
@@ -1325,7 +1444,10 @@ export function buildSlides(stats) {
         PLACES_SLIDE,
         FURTHEST_SLIDE,
         PASSPORT_SLIDE,
+        QUOTES_SLIDE,
         AWARDS_SLIDE,
+        PHOTO_WALL_SLIDE,
+        STRETCH_SLIDE,
         FINALE_SLIDE
     ];
 }

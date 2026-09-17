@@ -613,3 +613,74 @@ body.wrapped-lock { overflow: hidden; }
 .recap-race .wrapped-race-axis-label { fill: #9ca3af; }
 /* No reveal here: the recap is a page you scroll to, not a slide that plays. */
 .recap-race .wrapped-race-reveal { animation: none; clip-path: none; }
+
+/* --- quotes --------------------------------------------------------------- */
+
+.wrapped-quotes { display: flex; flex-direction: column; gap: 12px; }
+.wrapped-pull {
+    opacity: 0;
+    animation: wrapped-rise 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.wrapped-pull-text {
+    font-size: clamp(0.9rem, 4vw, 1.15rem);
+    font-style: italic;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.92);
+}
+.wrapped-pull-who { font-size: 11px; font-weight: 700; margin-top: 3px; display: block; }
+
+/* --- the photo wall ------------------------------------------------------- */
+/* Small on purpose: it should read as a pile of the year rather than a gallery. */
+.wrapped-wall {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: center;
+    gap: 0;
+    /* The cards are tilted up to nine degrees, so the clip box needs room for
+       their corners — without this the outermost photos get shaved. */
+    padding: 14px;
+    max-height: 58vh;
+    overflow: hidden;
+}
+.wrapped-wall .wrapped-polaroid {
+    margin: -5px;
+    padding: 4px 4px 4px;
+    border-radius: 2px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+.wrapped-wall .wrapped-polaroid img { aspect-ratio: 1 / 1; }
+
+/* --- stretch goals -------------------------------------------------------- */
+
+.wrapped-goal {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.09);
+    border-radius: 12px;
+    padding: 11px 13px;
+    margin-bottom: 8px;
+}
+.wrapped-goal-reward { font-size: 24px; flex-shrink: 0; }
+.wrapped-goal-body { flex: 1; min-width: 0; }
+/* These are spans inside a span, so they need telling to be blocks — inline
+   elements ignore height, which quietly swallowed the progress bar. */
+.wrapped-goal-body { display: block; }
+.wrapped-goal-label { display: block; font-size: 13px; font-weight: 800; }
+.wrapped-goal-note { display: block; font-size: 11px; color: rgba(255, 255, 255, 0.62); margin-top: 1px; }
+.wrapped-goal-bar {
+    display: block;
+    height: 5px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.16);
+    margin-top: 5px;
+    overflow: hidden;
+}
+.wrapped-goal-bar span { display: block; height: 100%; border-radius: 99px; }
+
+.wrapped-reduced .wrapped-pull { opacity: 1; animation: none; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+    .wrapped-pull { opacity: 1; animation: none; transform: none; }
+}
