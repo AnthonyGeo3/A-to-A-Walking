@@ -2230,6 +2230,13 @@
             furthest: { userId: 'user1', date: '2026-04-07' }
         };
 
+        // The note on the last slide. Change it each year — it is the only part
+        // of the whole thing that isn't worked out from the logs.
+        const WRAPPED_SIGNOFF = {
+            message: "Thank you for spending that last year with me, I'm excited to see what we get up to next year",
+            from: 'love Ant'
+        };
+
         const wrappedSeenKey = (n) => `a2a-wrapped-seen-y${n}`;
         // localStorage throws in private mode. Failing to read just means it offers
         // again, which is a far better failure than the show never appearing.
@@ -2268,7 +2275,8 @@
                 milestones: MASTER_MILESTONES,
                 milestoneDates: getMilestoneAchievementDates().annual,
                 stretch: { user1: getStretch('user1'), user2: getStretch('user2') },
-                featured: WRAPPED_FEATURED
+                featured: WRAPPED_FEATURED,
+                signoff: WRAPPED_SIGNOFF
             });
         }
 
@@ -2279,7 +2287,12 @@
         }
 
         function playWrapped(n, { record = !WRAPPED_PREVIEW } = {}) {
-            openWrapped(buildWrappedStats(n), {
+            const stats = buildWrappedStats(n);
+            if (stats.featuredMissing && stats.featuredMissing.length) {
+                console.warn('[A-to-A] A pinned photo did not match any log with a picture on it:',
+                             stats.featuredMissing, '\nThe slide will fall back to picking one itself.');
+            }
+            openWrapped(stats, {
                 muted: wrappedMuted(),
                 onMuteChange: setWrappedMuted,
                 onClose: ({ index, finished }) => {
