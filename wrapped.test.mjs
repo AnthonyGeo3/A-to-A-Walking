@@ -19,6 +19,7 @@ import {
     wrappedYears,
     haversineKm,
     lastMilestoneAtOrBelow,
+    recapHtml,
     challengeYearStart,
     challengeYearEnd,
     HOME
@@ -969,3 +970,55 @@ test('preview opens the current year early without moving the gate', () => {
     assert.deepEqual(wrappedYears(D(2026, 9, 17), { preview: true }), [1]);
     assert.deepEqual(wrappedYears(D(2026, 9, 17)), [], 'the real gate is untouched');
 });
+
+// --- the recap section -----------------------------------------------------
+
+test('the recap tiles run the way the rest of the page does', () => {
+    const w = computeWrapped(buildFixture(), 1, OPTS);
+    const html = recapHtml(w);
+    const grab = (cls) => [...html.matchAll(new RegExp(`class="recap-tile-${cls}"[^>]*>([^<]*)<`, 'g'))]
+        .map((m) => m[1].trim());
+    const labels = grab('label');
+    const values = grab('value');
+
+    // Top row is the pair of you; bottom row is one each, in the same order as
+    // every other left/right pair on the page.
+    assert.equal(labels[0], 'steps together');
+    assert.equal(values[0], fmtN(w.both.total));
+    assert.equal(values[1], `${fmtN(w.both.km)} km`);
+    assert.equal(labels[1], `${fmtN(w.both.miles)} miles`);
+    assert.equal(labels[2], 'Ant');
+    assert.equal(labels[3], 'Amy');
+    // The winner keeps their crown, so the totals are matched at the front.
+    assert.ok(values[2].startsWith(fmtN(w.user1.total)), values[2]);
+    assert.ok(values[3].startsWith(fmtN(w.user2.total)), values[3]);
+    assert.equal(values[w.race.winner === 'user1' ? 2 : 3].includes('👑'), true);
+    assert.equal(values[w.race.winner === 'user1' ? 3 : 2].includes('👑'), false);
+
+    assert.ok(!/between you/i.test(html), 'the distance is not framed as a gap between them');
+});
+
+test('the habit column swaps days logged for the best month', () => {
+    const w = computeWrapped(buildFixture(), 1, OPTS);
+    const html = recapHtml(w);
+    assert.ok(!/days logged/i.test(html), 'once you both log every day it says nothing');
+    // The month without its year — the section is already headed by one, and the
+    // columns are half a phone wide.
+    const monthOnly = (m) => m.label.replace(/\s+\d{4}$/, '');
+    assert.ok(html.includes(`Best month: <strong>${monthOnly(w.user1.bestMonth)}</strong>`), html.match(/Best month:[^<]*<strong>[^<]*/g));
+    assert.ok(html.includes(`Best month: <strong>${monthOnly(w.user2.bestMonth)}</strong>`));
+    assert.ok(!/Best month: <strong>[A-Za-z]+ \d{4}</.test(html), 'no year in the month');
+    assert.ok(html.includes(fmtN(w.user1.bestMonth.steps)));
+});
+
+test('a person with nothing logged has no best month to show', () => {
+    const w = computeWrapped(buildFixture().filter((l) => l.userId === 'user1'), 1, OPTS);
+    assert.equal(w.user2.bestMonth, null);
+    // The line is dropped rather than rendered empty or as "null".
+    const html = recapHtml(w);
+    assert.equal((html.match(/Best month:/g) || []).length, 1);
+    assert.ok(!/null/.test(html));
+});
+
+// Same rounding and grouping the recap itself uses.
+function fmtN(n) { return Math.round(n || 0).toLocaleString('en-GB'); }
