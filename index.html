@@ -2260,12 +2260,12 @@
             return years.length ? years[years.length - 1] : null;
         }
 
-        function playWrapped(n) {
+        function playWrapped(n, { record = !WRAPPED_PREVIEW } = {}) {
             openWrapped(buildWrappedStats(n), {
                 onClose: ({ index, finished }) => {
                     // A mis-tap on the cover shouldn't burn the surprise, so it only
                     // counts as seen once she's a few slides in. A preview never counts.
-                    if (!WRAPPED_PREVIEW && (finished || index >= 2)) {
+                    if (record && (finished || index >= 2)) {
                         markWrappedSeen(n);
                         renderWrappedBanner();
                     }
@@ -2321,6 +2321,37 @@
                     <span class="wrapped-banner-go">Play ▶</span>
                 </button>`;
             host.querySelector('button').onclick = () => playWrapped(n);
+        }
+
+        // Installed on a phone, the app starts at `start_url` — which carries no
+        // query string and shows no address bar — so ?wrapped=preview can never
+        // reach it there. This is the way in from inside the app: a long press on
+        // the little grey line under the title. Obscure enough not to be found by
+        // accident, and it never marks the year as seen.
+        function setupWrappedPreviewGesture() {
+            const el = document.getElementById('header-subtitle');
+            if (!el) return;
+            // Stop the press turning into a text selection or an iOS callout.
+            el.style.webkitUserSelect = 'none';
+            el.style.userSelect = 'none';
+            el.style.webkitTouchCallout = 'none';
+            el.addEventListener('contextmenu', e => e.preventDefault());
+
+            let timer = null;
+            const cancel = () => { clearTimeout(timer); timer = null; };
+            el.addEventListener('pointerdown', () => {
+                cancel();
+                timer = setTimeout(() => {
+                    if (!logData.length) return;
+                    // After the gate this should still show the finished year, not
+                    // the one currently in progress.
+                    const done = wrappedYears(new Date());
+                    const early = wrappedYears(new Date(), { preview: true });
+                    const n = done.length ? done[done.length - 1] : early[early.length - 1];
+                    if (n != null) playWrapped(n, { record: false });
+                }, 900);
+            });
+            ['pointerup', 'pointerleave', 'pointercancel'].forEach(e => el.addEventListener(e, cancel));
         }
 
         // The first visit after the gate opens plays on its own — but it opens on
@@ -2455,6 +2486,7 @@
             initializeMap();
             setupUserSelector();
             setupStatsFilter();
+            setupWrappedPreviewGesture();
             stepForm.addEventListener('submit', handleStepSubmit);
 
             // --- Real-time Listeners ---

@@ -1494,6 +1494,11 @@ export function openWrapped(stats, opts = {}) {
     let generation = 0;
     let holdTimer = null;
     let heldOpen = false;
+    // The show can be opened by a press that is still in progress — the long
+    // press on the header does exactly that. Without this, lifting that finger
+    // would land on the overlay and skip straight past the cover, which is the
+    // one slide that is supposed to wait.
+    let pressStarted = false;
 
     function clearSlide() {
         if (!current) return;
@@ -1582,17 +1587,25 @@ export function openWrapped(stats, opts = {}) {
     overlay.addEventListener('pointerdown', (e) => {
         if (e.target.closest('button')) return;
         heldOpen = false;
+        pressStarted = true;
         holdTimer = setTimeout(() => { heldOpen = true; setPaused(true); }, 220);
     });
     const endPress = (e) => {
         if (e.target.closest('button')) return;
         clearTimeout(holdTimer);
-        if (heldOpen) { heldOpen = false; setPaused(false); return; }
+        if (heldOpen) { heldOpen = false; pressStarted = false; setPaused(false); return; }
+        // A release with no press of its own belongs to whatever opened the show.
+        if (!pressStarted) return;
+        pressStarted = false;
         const x = e.clientX != null ? e.clientX : 0;
         if (x < overlay.clientWidth / 3) back(); else next();
     };
     overlay.addEventListener('pointerup', endPress);
-    overlay.addEventListener('pointercancel', () => { clearTimeout(holdTimer); if (heldOpen) { heldOpen = false; setPaused(false); } });
+    overlay.addEventListener('pointercancel', () => {
+        clearTimeout(holdTimer);
+        pressStarted = false;
+        if (heldOpen) { heldOpen = false; setPaused(false); }
+    });
 
     closeBtn.addEventListener('click', close);
 
