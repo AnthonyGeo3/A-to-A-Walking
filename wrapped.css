@@ -86,6 +86,27 @@ body.wrapped-lock { overflow: hidden; }
 }
 .wrapped-close:hover { background: rgba(255, 255, 255, 0.22); }
 
+/* Mirrors the close button on the other side of the notch. */
+.wrapped-mute {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 20px);
+    left: 12px;
+    z-index: 4;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.wrapped-mute:hover { background: rgba(255, 255, 255, 0.22); }
+
 .wrapped-stage {
     position: relative;
     flex: 1 1 auto;
@@ -425,6 +446,28 @@ body.wrapped-lock { overflow: hidden; }
 /* Every Leaflet interaction is switched off and the container ignores pointer
    events, so a tap on the map still advances the show rather than panning a map
    nobody asked to pan. */
+/* The map needs a positioned frame so the camera label can sit over it. */
+.wrapped-map-frame { position: relative; }
+.wrapped-map-caption {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 2;
+    max-width: calc(100% - 20px);
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: rgba(11, 15, 26, 0.72);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+}
+.wrapped-map-caption.is-on { opacity: 1; }
+
 .wrapped-map {
     width: 100%;
     height: min(44vh, 320px);
@@ -503,8 +546,11 @@ body.wrapped-lock { overflow: hidden; }
 .wrapped-reduced .wrapped-pin,
 .wrapped-reduced .wrapped-stamp,
 .wrapped-reduced .wrapped-award { opacity: 1; animation: none; transform: none; }
+/* Holding still means the label is simply there, not easing itself in. */
+.wrapped-reduced .wrapped-map-caption { transition: none; }
 @media (prefers-reduced-motion: reduce) {
     .wrapped-pin, .wrapped-stamp, .wrapped-award { opacity: 1; animation: none; transform: none; }
+    .wrapped-map-caption { transition: none; }
 }
 
 /* ---------------------------------------------------------------------------

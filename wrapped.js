@@ -1024,9 +1024,51 @@ const HABITS_SLIDE = {
     }
 };
 
+// Group the places into a handful of stops the camera can visit. Everything
+// within `clusterKm` of a stop joins it, so a year of laps round Wrexham is one
+// stop rather than forty pins landing on top of each other at world zoom.
+// Pure, so the running order of a tour can be checked without a map.
+export function buildMapTour(places, opts = {}) {
+    const clusterKm = opts.clusterKm != null ? opts.clusterKm : 200;
+    const maxStops = opts.maxStops != null ? opts.maxStops : 5;
+    const home = opts.home || HOME;
+
+    const clusters = [];
+    places.slice().sort((a, b) => a.firstDate - b.firstDate).forEach((p) => {
+        const near = clusters.find((c) => haversineKm({ lat: c.lat, lng: c.lng }, p) <= clusterKm);
+        if (near) {
+            near.places.push(p);
+            near.lat = near.places.reduce((t, q) => t + q.lat, 0) / near.places.length;
+            near.lng = near.places.reduce((t, q) => t + q.lng, 0) / near.places.length;
+        } else {
+            clusters.push({ places: [p], lat: p.lat, lng: p.lng });
+        }
+    });
+
+    clusters.forEach((c) => {
+        c.firstDate = c.places.reduce((d, q) => (q.firstDate < d ? q.firstDate : d), c.places[0].firstDate);
+        c.kmFromHome = haversineKm(home, { lat: c.lat, lng: c.lng }) || 0;
+        // Name the stop after whichever place in it you went to most often.
+        const best = c.places.slice().sort((a, b) =>
+            b.logs.length - a.logs.length || a.name.localeCompare(b.name))[0];
+        c.label = best.name;
+        c.country = best.country;
+    });
+
+    const byDate = (a, b) => a.firstDate - b.firstDate;
+    if (clusters.length <= maxStops) return clusters.sort(byDate);
+
+    // Too many to fly round in the time: keep the one nearest home, where it all
+    // starts, and the furthest-flung, which are the ones worth the journey.
+    const byDistance = clusters.slice().sort((a, b) => a.kmFromHome - b.kmFromHome);
+    const keep = new Set([byDistance[0], ...byDistance.slice(-(maxStops - 1))]);
+    return [...keep].sort(byDate);
+}
+
 const PLACES_SLIDE = {
     id: 'places',
-    duration: 8000,
+    // Twice as long as the rest: this one has somewhere to go.
+    duration: 16000,
     wash: ['#0ea5e9', '#22c55e'],
     // Leaflet is loaded by the page, not by this module, so the slide checks for
     // it rather than assuming it.
@@ -1034,20 +1076,28 @@ const PLACES_SLIDE = {
     images: (stats) => stats.both.places
         .map((p) => (p.logs.find((l) => l.photoUrl) || {}).photoUrl)
         .filter(Boolean).slice(0, 6),
-    render(stats) {
-        const places = stats.both.places.slice().sort((a, b) => a.firstDate - b.firstDate);
+    render(stats, ctx) {
+        const places = stats.both.places;
         const countries = stats.both.countries.length;
+        const tour = buildMapTour(places);
 
         const wrap = el('div');
         wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'Everywhere you went'));
+
+        const frame = el('div', 'wrapped-map-frame');
         const host = el('div', 'wrapped-map');
-        wrap.append(host);
+        const caption = el('div', 'wrapped-map-caption');
+        frame.append(host, caption);
+        wrap.append(frame);
+
         wrap.append(delay(el('div', 'wrapped-mid wrapped-rise',
             `<strong>${places.length}</strong> ${places.length === 1 ? 'place' : 'places'}` +
             (countries > 1 ? ` &middot; <strong>${countries}</strong> countries` : '')), 300));
 
         let map = null;
         const timers = [];
+        const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+
         // The node has to be in the document with a size before Leaflet can lay
         // itself out, and it is appended straight after render returns.
         const raf = requestAnimationFrame(() => {
@@ -1058,27 +1108,71 @@ const PLACES_SLIDE = {
                 doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false
             });
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            const bounds = L.latLngBounds(places.map((p) => [p.lat, p.lng]));
-            map.fitBounds(bounds, { padding: [30, 30], maxZoom: 11 });
+            const everywhere = L.latLngBounds(places.map((p) => [p.lat, p.lng]));
+            map.fitBounds(everywhere, { padding: [30, 30], maxZoom: 9 });
             // The slide fades in over the same beat, so make sure the map sized
             // itself against the final box.
             map.invalidateSize();
 
-            places.forEach((place, i) => {
-                timers.push(setTimeout(() => {
+            const dropped = new Set();
+            const drop = (place) => {
+                if (!map || dropped.has(place.key)) return;
+                dropped.add(place.key);
+                const first = place.logs.slice().sort((a, b) => a.date - b.date)[0];
+                const mine = first.userId === 'user1' ? 'ant' : 'amy';
+                L.marker([place.lat, place.lng], {
+                    interactive: false,
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<div class="wrapped-pin wrapped-pin-${mine}"></div>`,
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7]
+                    })
+                }).addTo(map);
+            };
+
+            // Holding still is the right answer for reduced motion, and there is
+            // nowhere to fly to if everything happened in one place.
+            if (ctx.reduced || tour.length < 2) {
+                caption.textContent = tour.length ? tour[0].label : '';
+                caption.classList.add('is-on');
+                places.forEach(drop);
+                return;
+            }
+
+            // Budget the flight inside the slide, with a second of slack.
+            const TOTAL = 15000;
+            const finalHold = 2800;
+            const per = Math.max(2300, (TOTAL - finalHold) / tour.length);
+            const flyMs = Math.round(per * 0.62);
+            const dwellMs = Math.round(per - flyMs);
+
+            let t = 500;
+            tour.forEach((stop) => {
+                at(t, () => {
                     if (!map) return;
-                    const first = place.logs.slice().sort((a, b) => a.date - b.date)[0];
-                    const mine = first.userId === 'user1' ? 'ant' : 'amy';
-                    L.marker([place.lat, place.lng], {
-                        interactive: false,
-                        icon: L.divIcon({
-                            className: '',
-                            html: `<div class="wrapped-pin wrapped-pin-${mine}"></div>`,
-                            iconSize: [14, 14],
-                            iconAnchor: [7, 7]
-                        })
-                    }).addTo(map);
-                }, 400 + i * 160));
+                    caption.textContent = stop.label;
+                    caption.classList.add('is-on');
+                    const here = L.latLngBounds(stop.places.map((p) => [p.lat, p.lng]));
+                    // Regional, not street level — close enough to see where you
+                    // were, far enough not to be a blur of rooftops.
+                    map.flyToBounds(here.pad(0.7), { duration: flyMs / 1000, maxZoom: 7 });
+                });
+                // The pins land once the camera has arrived, spread over the pause.
+                const gap = Math.max(90, dwellMs / Math.max(1, stop.places.length));
+                stop.places.forEach((p, k) => at(t + flyMs + k * gap, () => drop(p)));
+                t += flyMs + dwellMs;
+            });
+
+            // Pull back to the whole year at the end, with anything not yet
+            // dropped arriving as the camera rises.
+            at(t, () => {
+                if (!map) return;
+                // The line under the map already totals the year up, so the
+                // camera label just gets out of the way rather than repeating it.
+                caption.classList.remove('is-on');
+                places.forEach(drop);
+                map.flyToBounds(everywhere.pad(0.15), { duration: 1.8, maxZoom: 6 });
             });
         });
 
@@ -1452,10 +1546,160 @@ export function buildSlides(stats) {
     ];
 }
 
+// ---------------------------------------------------------------------------
+// Ambience
+// ---------------------------------------------------------------------------
+// A quiet pad, synthesised rather than played from a file: nothing to host,
+// nothing to license, nothing extra for the service worker to carry, and it
+// works with no network. If a real recording is ever preferred, replace the
+// insides of createAmbience with an <audio> element — start / stop / setMuted
+// is the whole interface the player uses.
+//
+// iOS will not let audio start on its own, so nothing is created until the
+// first tap inside the show. That lands on "Tap to begin", which is a good
+// place for the music to come in anyway.
+
+// Slow, warm, and low in the mix. Four voices a chord, all inside two octaves
+// so the changes drift rather than jump.
+const AMBIENCE_CHORDS = [
+    [146.83, 220.00, 277.18, 329.63], // D major 9
+    [123.47, 185.00, 220.00, 293.66], // B minor 7
+    [98.00, 146.83, 185.00, 246.94],  // G major 7
+    [110.00, 164.81, 246.94, 293.66]  // A sus
+];
+const CHORD_SECONDS = 13;
+// Each chord holds until the next one begins, then takes CHORD_FADE to die away
+// underneath it. Anything shorter leaves an audible hole between chords.
+const CHORD_FADE = 6;
+const SCHEDULE_AHEAD = 60;    // seconds of music booked in advance
+const AMBIENCE_LEVEL = 0.55;
+
+export function createAmbience() {
+    let ctx = null;
+    let master = null;
+    let timer = null;
+    let index = 0;
+    let nextAt = 0;
+    let muted = false;
+
+    function playChordAt(freqs, when) {
+        const peak = 0.16 / freqs.length;
+        freqs.forEach((f, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = i === 0 ? 'sine' : 'triangle';
+            osc.frequency.value = f;
+            // A few cents apart, so four oscillators don't read as one organ.
+            osc.detune.value = (i - 1.5) * 4;
+            gain.gain.setValueAtTime(0.0001, when);
+            gain.gain.exponentialRampToValueAtTime(peak, when + CHORD_FADE);
+            gain.gain.setValueAtTime(peak, when + CHORD_SECONDS);
+            gain.gain.exponentialRampToValueAtTime(0.0001, when + CHORD_SECONDS + CHORD_FADE);
+            osc.connect(gain).connect(master);
+            osc.start(when);
+            osc.stop(when + CHORD_SECONDS + CHORD_FADE + 0.2);
+        });
+    }
+
+    // Chords are booked against the audio clock, well ahead of being heard, and
+    // a lazy timer just tops the queue up. A phone throttles timers hard once
+    // the screen is busy or the app is in the background; the music must not
+    // fall silent because of it.
+    function schedule() {
+        if (!ctx) return;
+        const horizon = ctx.currentTime + SCHEDULE_AHEAD;
+        while (nextAt < horizon) {
+            playChordAt(AMBIENCE_CHORDS[index % AMBIENCE_CHORDS.length], nextAt);
+            index += 1;
+            nextAt += CHORD_SECONDS;
+        }
+        timer = setTimeout(schedule, 8000);
+    }
+
+    function level(to, seconds) {
+        if (!ctx || !master) return;
+        const now = ctx.currentTime;
+        master.gain.cancelScheduledValues(now);
+        master.gain.setValueAtTime(master.gain.value, now);
+        master.gain.linearRampToValueAtTime(to, now + seconds);
+    }
+
+    return {
+        get started() { return ctx !== null; },
+
+        // Must be called from inside a user gesture, or iOS will refuse.
+        start() {
+            if (ctx) return;
+            const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+            if (!AC) return;
+            try {
+                ctx = new AC();
+            } catch (e) {
+                ctx = null;
+                return;
+            }
+            master = ctx.createGain();
+            master.gain.setValueAtTime(0, ctx.currentTime);
+
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 900;
+            filter.Q.value = 0.6;
+            master.connect(filter).connect(ctx.destination);
+
+            // An extremely slow sweep on the cutoff, so it breathes instead of
+            // sitting still for three minutes.
+            const lfo = ctx.createOscillator();
+            const lfoGain = ctx.createGain();
+            lfo.frequency.value = 0.03;
+            lfoGain.gain.value = 260;
+            lfo.connect(lfoGain).connect(filter.frequency);
+            lfo.start();
+
+            const resumed = ctx.resume();
+            if (resumed && typeof resumed.catch === 'function') resumed.catch(() => {});
+            // Ramp up from a known zero rather than going through level(), which
+            // reads gain.value — and immediately after setValueAtTime(0) that
+            // still reports the default of 1, so the music came in at full
+            // volume and faded *down* into place.
+            const t0 = ctx.currentTime;
+            master.gain.cancelScheduledValues(t0);
+            master.gain.setValueAtTime(0, t0);
+            master.gain.linearRampToValueAtTime(muted ? 0 : AMBIENCE_LEVEL, t0 + 2.5);
+            nextAt = ctx.currentTime;
+            schedule();
+        },
+
+        setMuted(next) {
+            muted = !!next;
+            level(muted ? 0 : AMBIENCE_LEVEL, 0.4);
+        },
+
+        // Politely quiet while the app is in the background.
+        setSuspended(hidden) {
+            if (!ctx) return;
+            if (hidden) ctx.suspend().catch(() => {});
+            else ctx.resume().catch(() => {});
+        },
+
+        stop() {
+            clearTimeout(timer);
+            timer = null;
+            if (!ctx) return;
+            const closing = ctx;
+            level(0, 0.5);
+            ctx = null;
+            master = null;
+            setTimeout(() => { closing.close().catch(() => {}); }, 700);
+        }
+    };
+}
+
 /**
  * Mount and run the show.
  * @param {object} stats  from computeWrapped()
- * @param {object} opts   { onClose({ index, finished }), onRecap(), slides, reducedMotion }
+ * @param {object} opts   { onClose({ index, finished }), onRecap(), slides,
+ *                          reducedMotion, muted, onMuteChange(muted) }
  * @returns {function} a close handle, in case the caller needs to dismiss it
  */
 export function openWrapped(stats, opts = {}) {
@@ -1484,8 +1728,9 @@ export function openWrapped(stats, opts = {}) {
 
     const closeBtn = el('button', 'wrapped-close', '&times;');
     closeBtn.setAttribute('aria-label', 'Close');
+    const muteBtn = el('button', 'wrapped-mute');
     const stage = el('div', 'wrapped-stage');
-    overlay.append(progress, closeBtn, stage);
+    overlay.append(progress, muteBtn, closeBtn, stage);
 
     let index = -1;
     let finished = false;
@@ -1494,6 +1739,8 @@ export function openWrapped(stats, opts = {}) {
     let generation = 0;
     let holdTimer = null;
     let heldOpen = false;
+    const ambience = createAmbience();
+    let muted = !!opts.muted;
     // The show can be opened by a press that is still in progress — the long
     // press on the header does exactly that. Without this, lifting that finger
     // would land on the overlay and skip straight past the cover, which is the
@@ -1574,8 +1821,37 @@ export function openWrapped(stats, opts = {}) {
         });
     }
 
+    function paintMute() {
+        muteBtn.innerHTML = muted ? '🔇' : '🔊';
+        muteBtn.setAttribute('aria-label', muted ? 'Unmute the music' : 'Mute the music');
+        muteBtn.setAttribute('aria-pressed', String(muted));
+    }
+    paintMute();
+
+    muteBtn.addEventListener('click', () => {
+        muted = !muted;
+        paintMute();
+        // A click is a gesture, so this is a legitimate moment to start the
+        // audio if it was muted when the show opened and never got going.
+        if (!muted) ambience.start();
+        ambience.setMuted(muted);
+        if (typeof opts.onMuteChange === 'function') opts.onMuteChange(muted);
+    });
+
+    // iOS will not allow audio until the viewer has touched something, and the
+    // long press that can open the show happens on a timer, which does not
+    // count. The first tap inside the show does.
+    function startAudioOnGesture() {
+        if (!muted) ambience.start();
+    }
+
+    function onVisibility() { ambience.setSuspended(document.hidden); }
+    document.addEventListener('visibilitychange', onVisibility);
+
     function close() {
         clearSlide();
+        ambience.stop();
+        document.removeEventListener('visibilitychange', onVisibility);
         document.removeEventListener('keydown', onKey);
         overlay.remove();
         document.body.classList.remove('wrapped-lock');
@@ -1586,6 +1862,7 @@ export function openWrapped(stats, opts = {}) {
     // rest goes on — the convention everyone already has in their thumbs.
     overlay.addEventListener('pointerdown', (e) => {
         if (e.target.closest('button')) return;
+        startAudioOnGesture();
         heldOpen = false;
         pressStarted = true;
         holdTimer = setTimeout(() => { heldOpen = true; setPaused(true); }, 220);
@@ -1610,6 +1887,7 @@ export function openWrapped(stats, opts = {}) {
     closeBtn.addEventListener('click', close);
 
     function onKey(e) {
+        startAudioOnGesture();
         if (e.key === 'Escape') { close(); return; }
         if (e.key === 'ArrowRight') { next(); return; }
         if (e.key === 'ArrowLeft') { back(); return; }

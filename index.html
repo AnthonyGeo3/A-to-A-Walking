@@ -2231,6 +2231,14 @@
             try { localStorage.setItem(wrappedSeenKey(n), '1'); } catch (e) { /* nothing to do */ }
         }
 
+        // Whether the music is off, remembered per device like the seen flag.
+        function wrappedMuted() {
+            try { return localStorage.getItem('a2a-wrapped-muted') === '1'; } catch (e) { return false; }
+        }
+        function setWrappedMuted(m) {
+            try { localStorage.setItem('a2a-wrapped-muted', m ? '1' : '0'); } catch (e) { /* nothing to do */ }
+        }
+
         // The engine takes plain objects with a real Date — no Firestore wrapper,
         // which is what lets it be tested outside a browser.
         function wrappedLogs() {
@@ -2262,6 +2270,8 @@
 
         function playWrapped(n, { record = !WRAPPED_PREVIEW } = {}) {
             openWrapped(buildWrappedStats(n), {
+                muted: wrappedMuted(),
+                onMuteChange: setWrappedMuted,
                 onClose: ({ index, finished }) => {
                     // A mis-tap on the cover shouldn't burn the surprise, so it only
                     // counts as seen once she's a few slides in. A preview never counts.

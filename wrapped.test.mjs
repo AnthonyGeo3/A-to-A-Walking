@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     computeWrapped,
+    buildMapTour,
     buildSlides,
     monthSlide,
     yearWord,
@@ -658,6 +659,81 @@ test('year names read as words', () => {
     assert.equal(yearWord(2), 'Year Two');
     assert.equal(yearWord(10), 'Year Ten');
     assert.equal(yearWord(11), 'Year 11', 'past ten it just uses the number');
+});
+
+// --- the map tour ----------------------------------------------------------
+
+const place = (name, lat, lng, day, logs = 1) => ({
+    key: name, name, lat, lng, country: 'x',
+    firstDate: D(2026, 1, day), logs: Array.from({ length: logs }, (_, i) => ({ id: name + i }))
+});
+
+test('places near each other become one stop', () => {
+    // Four laps round Wrexham and one trip to Chester: all within 200km.
+    const tour = buildMapTour([
+        place('Erddig', 53.02, -3.02, 1, 12),
+        place('Bersham', 53.04, -3.03, 2),
+        place('Alyn Waters', 53.08, -3.05, 3),
+        place('Chester', 53.19, -2.89, 4)
+    ]);
+    assert.equal(tour.length, 1, 'one stop, not four pins on top of each other');
+    assert.equal(tour[0].places.length, 4);
+    // Named after wherever you went most.
+    assert.equal(tour[0].label, 'Erddig');
+});
+
+test('a real trip gets a stop of its own', () => {
+    const tour = buildMapTour([
+        place('Erddig', 53.02, -3.02, 1, 30),
+        place('Las Vegas', 36.17, -115.14, 5),
+        place('Tenerife', 28.29, -16.63, 9)
+    ]);
+    assert.deepEqual(tour.map((t) => t.label), ['Erddig', 'Las Vegas', 'Tenerife']);
+    assert.ok(tour[1].kmFromHome > 7000, `Vegas is ${Math.round(tour[1].kmFromHome)}km away`);
+});
+
+test('the tour runs in the order you went', () => {
+    const tour = buildMapTour([
+        place('Tenerife', 28.29, -16.63, 20),
+        place('Erddig', 53.02, -3.02, 2),
+        place('Las Vegas', 36.17, -115.14, 11)
+    ]);
+    assert.deepEqual(tour.map((t) => t.label), ['Erddig', 'Las Vegas', 'Tenerife']);
+});
+
+test('too many stops keeps home and the furthest-flung', () => {
+    const tour = buildMapTour([
+        place('Erddig', 53.02, -3.02, 1, 40),
+        place('Edinburgh', 55.95, -3.19, 2),
+        place('London', 51.51, -0.13, 3),
+        place('Lisbon', 38.72, -9.14, 4),
+        place('Tenerife', 28.29, -16.63, 5),
+        place('Las Vegas', 36.17, -115.14, 6),
+        place('Sydney', -33.87, 151.21, 7)
+    ], { maxStops: 4 });
+
+    assert.equal(tour.length, 4);
+    const labels = tour.map((t) => t.label);
+    assert.ok(labels.includes('Erddig'), 'home is always in it');
+    assert.ok(labels.includes('Sydney'), 'so is the furthest');
+    // And still in the order they happened.
+    assert.deepEqual(tour.map((t) => t.firstDate).slice().sort((a, b) => a - b),
+        tour.map((t) => t.firstDate));
+});
+
+test('one place is one stop, and the slide holds still for it', () => {
+    const tour = buildMapTour([place('Erddig', 53.02, -3.02, 1)]);
+    assert.equal(tour.length, 1);
+    assert.deepEqual(buildMapTour([]), []);
+});
+
+test('the map slide gets twice as long to fly round', () => {
+    const w = wrapped();
+    const places = buildSlides(w).find((s) => s.id === 'places');
+    assert.equal(places.duration, 16000);
+    // Every other timed slide is well under that.
+    const others = buildSlides(w).filter((s) => s.id !== 'places' && Number.isFinite(s.duration));
+    assert.ok(others.every((s) => s.duration <= 10000));
 });
 
 // --- edge cases ------------------------------------------------------------
