@@ -658,6 +658,75 @@ export function computeWrapped(logs, yearN, opts = {}) {
     }
 }
 
+// --- what all those steps actually amount to -------------------------------
+// "Wrexham to the M25 sixteen times" is technically true and no fun at all.
+// These are the things worth telling someone, biggest-feeling first, and the
+// slide shows the handful that land in a range worth bragging about.
+
+export const EARTH_KM = 40075;
+
+// Distances are the walked or driven routes people actually quote, not
+// great-circle lines: Land's End to John o' Groats is famously 874 miles on
+// foot, not the 968km a straight line would give you.
+const WREXHAM_TO_PARIS_KM = 597;
+
+function timesPhrase(n) {
+    if (n >= 100) return `${Math.round(n).toLocaleString('en-GB')} times`;
+    if (n >= 10) return `${Math.round(n)} times`;
+    const one = n.toFixed(1);
+    if (one === '1.0') return 'once';
+    if (one === '2.0') return 'twice';
+    return `${one} times`;
+}
+function countPhrase(n) {
+    return n >= 10 ? Math.round(n).toLocaleString('en-GB') : n.toFixed(1);
+}
+
+export const FUN_COMPARISONS = [
+    { id: 'paris', emoji: '🗼', km: WREXHAM_TO_PARIS_KM * 2,
+      phrase: (n) => `Wrexham to Paris and back, ${timesPhrase(n)}` },
+    { id: 'lejog', emoji: '🥾', km: 1407,
+      phrase: (n) => `Land's End to John o' Groats, ${timesPhrase(n)}` },
+    { id: 'wales', emoji: '🐉', km: 274,
+      phrase: (n) => `The length of Wales, ${timesPhrase(n)}` },
+    { id: 'everest', emoji: '🏔️', steps: STEPS_PER_EVEREST,
+      phrase: (n) => `Everest, ${timesPhrase(n)} over` },
+    { id: 'marathon', emoji: '🏃', km: 42.195,
+      phrase: (n) => `${countPhrase(n)} marathons` },
+    { id: 'rome', emoji: '🏛️', km: 1693,
+      phrase: (n) => `Wrexham to Rome, ${timesPhrase(n)}` },
+    { id: 'britain', emoji: '🌊', km: 11073,
+      phrase: (n) => `Round the coast of Britain, ${timesPhrase(n)}` },
+    { id: 'greatwall', emoji: '🧱', km: 21196,
+      phrase: (n) => `The Great Wall of China, ${timesPhrase(n)}` }
+];
+
+/** The handful of comparisons worth showing, always finishing on the planet. */
+export function funComparisons(stats, { limit = 5 } = {}) {
+    const km = stats.both.km;
+    const steps = stats.both.total;
+    const out = [];
+
+    for (const c of FUN_COMPARISONS) {
+        if (out.length >= limit - 1) break;
+        const n = c.steps ? steps / c.steps : km / c.km;
+        // "0.4 times to Paris" is not a fun fact. Exactly once very much is.
+        if (!(n >= 1)) continue;
+        out.push({ id: c.id, emoji: c.emoji, n, text: c.phrase(n) });
+    }
+
+    // The planet always closes it — as a share of the way round until the day
+    // you have actually lapped it.
+    const laps = km / EARTH_KM;
+    out.push({
+        id: 'world', emoji: '🌍', n: laps,
+        text: laps >= 1
+            ? `Right round the world, ${timesPhrase(laps)}`
+            : `${(laps * 100).toFixed(1)}% of the way round the world`
+    });
+    return out;
+}
+
 // The furthest place along the app's own journey that a step count reaches.
 export function lastMilestoneAtOrBelow(steps, milestones) {
     let best = null;
@@ -760,26 +829,31 @@ const COVER_SLIDE = {
 
 const BIG_NUMBER_SLIDE = {
         id: 'bigNumber',
-        duration: 8000,
+        // Five things to read, so it needs longer than a headline slide.
+        duration: 12000,
         wash: ['#22c55e', '#0ea5e9'],
         render(stats, ctx) {
             const wrap = el('div');
             const number = el('div', 'wrapped-huge');
             number.textContent = '0';
-            const km = delay(el('div', 'wrapped-big wrapped-rise', `${fmt(stats.both.km)} km`), 2400);
-            const dest = stats.both.destination
-                ? delay(el('div', 'wrapped-mid wrapped-rise',
-                    `Together, that's Wrexham to<br><strong>${stats.both.destination.label}</strong>`), 3400)
-                : delay(el('div', 'wrapped-mid wrapped-rise',
-                    `That's ${fmt(stats.both.marathons)} marathons between you`), 3400);
 
             wrap.append(
                 el('div', 'wrapped-eyebrow wrapped-rise', 'Between you, this year'),
                 number,
                 el('div', 'wrapped-sub', 'steps'),
-                km,
-                dest
+                delay(el('div', 'wrapped-big wrapped-rise',
+                    `${fmt(stats.both.km)} km <span style="opacity:.55">&middot;</span> ${fmt(stats.both.miles)} miles`), 2400)
             );
+
+            const list = delay(el('div', 'wrapped-equiv wrapped-rise'), 3100);
+            funComparisons(stats).forEach((c, i) => {
+                const row = el('div', 'wrapped-equiv-row',
+                    `<span class="wrapped-equiv-emoji">${c.emoji}</span><span>${esc(c.text)}</span>`);
+                row.style.animationDelay = `${3300 + i * 320}ms`;
+                list.append(row);
+            });
+            wrap.append(delay(el('div', 'wrapped-eyebrow wrapped-equiv-head wrapped-rise', 'which is'), 3000), list);
+
             wrap._cleanup = countUp(number, stats.both.total, 2500, ctx.reduced);
             return wrap;
         }
@@ -1559,61 +1633,111 @@ export function buildSlides(stats) {
 // first tap inside the show. That lands on "Tap to begin", which is a good
 // place for the music to come in anyway.
 
-// Slow, warm, and low in the mix. Four voices a chord, all inside two octaves
-// so the changes drift rather than jump.
-const AMBIENCE_CHORDS = [
-    [146.83, 220.00, 277.18, 329.63], // D major 9
-    [123.47, 185.00, 220.00, 293.66], // B minor 7
-    [98.00, 146.83, 185.00, 246.94],  // G major 7
-    [110.00, 164.81, 246.94, 293.66]  // A sus
-];
-const CHORD_SECONDS = 13;
-// Each chord holds until the next one begins, then takes CHORD_FADE to die away
-// underneath it. Anything shorter leaves an audible hole between chords.
-const CHORD_FADE = 6;
-const SCHEDULE_AHEAD = 60;    // seconds of music booked in advance
+// Tempo first, because tempo is most of the difference between "celebration"
+// and "someone is about to be murdered in this film". A slow filtered drone
+// with no pulse is horror-film ambience however pretty the chords are; what
+// makes something read as soft jazz is a walking bass, an off-beat comp and a
+// swung eighth.
+const TEMPO = 96;                  // relaxed, but it moves
+const BEAT = 60 / TEMPO;
+const BAR = BEAT * 4;
+const SWING = BEAT * (2 / 3);      // where the "and" actually lands
+const SCHEDULE_AHEAD = 20;         // seconds of music booked in advance
 const AMBIENCE_LEVEL = 0.55;
+
+const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
+
+// Eight bars of a I-vi-ii-V turnaround in C, with a secondary dominant in the
+// middle so it doesn't just chase its own tail. The bass line walks in crotchets
+// and ends each bar on a note that leans into the next chord's root; the comp is
+// rootless voicings, which is what leaves room for the bass.
+const JAZZ_BARS = [
+    { name: 'Cmaj9', bass: [48, 52, 55, 56], comp: [52, 55, 59, 62], melody: curveTop(71) },
+    { name: 'Am9',   bass: [45, 48, 52, 51], comp: [48, 52, 55, 59], melody: null },
+    { name: 'Dm7',   bass: [50, 53, 57, 56], comp: [53, 57, 60, 64], melody: curveTop(69) },
+    { name: 'G13',   bass: [43, 47, 50, 53], comp: [53, 59, 64],     melody: null },
+    { name: 'Em9',   bass: [52, 55, 59, 58], comp: [55, 59, 62, 66], melody: curveTop(74) },
+    { name: 'A13',   bass: [45, 49, 52, 51], comp: [55, 61, 66],     melody: curveTop(73) },
+    { name: 'Dm7',   bass: [50, 53, 57, 56], comp: [53, 57, 60, 64], melody: null },
+    { name: 'G13',   bass: [43, 47, 50, 47], comp: [53, 59, 64],     melody: curveTop(67) }
+];
+function curveTop(n) { return n; }
 
 export function createAmbience() {
     let ctx = null;
     let master = null;
     let timer = null;
-    let index = 0;
+    let bar = 0;
     let nextAt = 0;
     let muted = false;
+    // Seeded, so the same little timing and velocity wobbles happen every time
+    // rather than the pad sounding different on every replay.
+    let seed = 20261001;
+    const rnd = () => {
+        seed = (seed * 1664525 + 1013904223) % 4294967296;
+        return seed / 4294967296;
+    };
+    const human = (amount) => (rnd() - 0.5) * amount;
 
-    function playChordAt(freqs, when) {
-        const peak = 0.16 / freqs.length;
-        freqs.forEach((f, i) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = i === 0 ? 'sine' : 'triangle';
-            osc.frequency.value = f;
-            // A few cents apart, so four oscillators don't read as one organ.
-            osc.detune.value = (i - 1.5) * 4;
-            gain.gain.setValueAtTime(0.0001, when);
-            gain.gain.exponentialRampToValueAtTime(peak, when + CHORD_FADE);
-            gain.gain.setValueAtTime(peak, when + CHORD_SECONDS);
-            gain.gain.exponentialRampToValueAtTime(0.0001, when + CHORD_SECONDS + CHORD_FADE);
-            osc.connect(gain).connect(master);
-            osc.start(when);
-            osc.stop(when + CHORD_SECONDS + CHORD_FADE + 0.2);
-        });
+    // One struck note: fast on, long off. That envelope is what makes it read as
+    // something plucked or struck rather than something looming.
+    function strike(freq, when, { level, decay, type = 'sine', detune = 0 }) {
+        if (when < ctx.currentTime - 0.05) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        osc.detune.value = detune;
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, level), when + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+        osc.connect(gain).connect(master);
+        osc.start(when);
+        osc.stop(when + decay + 0.05);
     }
 
-    // Chords are booked against the audio clock, well ahead of being heard, and
-    // a lazy timer just tops the queue up. A phone throttles timers hard once
-    // the screen is busy or the app is in the background; the music must not
-    // fall silent because of it.
+    // A Rhodes is a struck tine: the fundamental plus a quieter octave above it.
+    function rhodes(note, when, level) {
+        strike(midi(note), when, { level, decay: 1.5, type: 'sine', detune: human(6) });
+        strike(midi(note + 12), when, { level: level * 0.3, decay: 0.9, type: 'sine' });
+    }
+
+    function playBar(spec, when) {
+        // Walking bass, one note a beat. This is the pulse the whole thing hangs on.
+        spec.bass.forEach((note, i) => {
+            strike(midi(note), when + i * BEAT + human(0.012), {
+                level: 0.2 + human(0.03), decay: 0.62, type: 'triangle'
+            });
+        });
+
+        // Comp on the "and" of two and on four — off the beat, which is where
+        // jazz piano sits and why it swings rather than marches.
+        [BEAT + SWING, BEAT * 3].forEach((offset, hit) => {
+            const level = (hit === 0 ? 0.052 : 0.044) + human(0.008);
+            spec.comp.forEach((note) => rhodes(note, when + offset + human(0.014), level));
+        });
+
+        // A single vibraphone note over the top of some bars, on the "and" of
+        // four, so it leans into the next bar.
+        if (spec.melody != null) {
+            strike(midi(spec.melody), when + BEAT * 3 + SWING + human(0.02), {
+                level: 0.075, decay: 2.2, type: 'sine'
+            });
+        }
+    }
+
+    // Bars are booked against the audio clock well ahead of being heard, and a
+    // lazy timer tops the queue up. A phone throttles timers hard once the
+    // screen is busy; the music must not stumble because of it.
     function schedule() {
         if (!ctx) return;
         const horizon = ctx.currentTime + SCHEDULE_AHEAD;
         while (nextAt < horizon) {
-            playChordAt(AMBIENCE_CHORDS[index % AMBIENCE_CHORDS.length], nextAt);
-            index += 1;
-            nextAt += CHORD_SECONDS;
+            playBar(JAZZ_BARS[bar % JAZZ_BARS.length], nextAt);
+            bar += 1;
+            nextAt += BAR;
         }
-        timer = setTimeout(schedule, 8000);
+        timer = setTimeout(schedule, 4000);
     }
 
     function level(to, seconds) {
@@ -1639,25 +1763,18 @@ export function createAmbience() {
                 return;
             }
             master = ctx.createGain();
-            master.gain.setValueAtTime(0, ctx.currentTime);
 
+            // Open enough to hear the tines, closed enough to stay soft. The
+            // old 900Hz lowpass was half of why it sounded like a warning.
             const filter = ctx.createBiquadFilter();
             filter.type = 'lowpass';
-            filter.frequency.value = 900;
-            filter.Q.value = 0.6;
+            filter.frequency.value = 2600;
+            filter.Q.value = 0.4;
             master.connect(filter).connect(ctx.destination);
-
-            // An extremely slow sweep on the cutoff, so it breathes instead of
-            // sitting still for three minutes.
-            const lfo = ctx.createOscillator();
-            const lfoGain = ctx.createGain();
-            lfo.frequency.value = 0.03;
-            lfoGain.gain.value = 260;
-            lfo.connect(lfoGain).connect(filter.frequency);
-            lfo.start();
 
             const resumed = ctx.resume();
             if (resumed && typeof resumed.catch === 'function') resumed.catch(() => {});
+
             // Ramp up from a known zero rather than going through level(), which
             // reads gain.value — and immediately after setValueAtTime(0) that
             // still reports the default of 1, so the music came in at full
@@ -1665,8 +1782,10 @@ export function createAmbience() {
             const t0 = ctx.currentTime;
             master.gain.cancelScheduledValues(t0);
             master.gain.setValueAtTime(0, t0);
-            master.gain.linearRampToValueAtTime(muted ? 0 : AMBIENCE_LEVEL, t0 + 2.5);
-            nextAt = ctx.currentTime;
+            master.gain.linearRampToValueAtTime(muted ? 0 : AMBIENCE_LEVEL, t0 + 1.6);
+
+            bar = 0;
+            nextAt = t0 + 0.15;
             schedule();
         },
 

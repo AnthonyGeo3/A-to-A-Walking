@@ -732,3 +732,34 @@ body.wrapped-lock { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
     .wrapped-pull { opacity: 1; animation: none; transform: none; }
 }
+
+/* --- what the steps add up to (the big number slide) ---------------------- */
+
+/* The distance above it is set large, so this needs room to breathe. */
+.wrapped-equiv-head { margin-top: 10px; }
+.wrapped-equiv {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 2px;
+}
+.wrapped-equiv-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    font-size: clamp(0.78rem, 3.4vw, 0.95rem);
+    font-weight: 600;
+    line-height: 1.25;
+    background: rgba(255, 255, 255, 0.09);
+    border-radius: 10px;
+    padding: 8px 12px;
+    opacity: 0;
+    animation: wrapped-rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.wrapped-equiv-emoji { font-size: 17px; flex-shrink: 0; }
+
+.wrapped-reduced .wrapped-equiv-row { opacity: 1; animation: none; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+    .wrapped-equiv-row { opacity: 1; animation: none; transform: none; }
+}

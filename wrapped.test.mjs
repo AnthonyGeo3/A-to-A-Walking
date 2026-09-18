@@ -9,6 +9,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     computeWrapped,
+    funComparisons,
+    FUN_COMPARISONS,
+    EARTH_KM,
     buildMapTour,
     buildSlides,
     monthSlide,
@@ -661,6 +664,76 @@ test('year names read as words', () => {
     assert.equal(yearWord(11), 'Year 11', 'past ten it just uses the number');
 });
 
+// --- what the steps add up to ----------------------------------------------
+
+const withDistance = (km) => ({ both: { km, miles: km / 1.609, total: km * 1300 } });
+
+test('a real year gets five things worth saying', () => {
+    // Roughly where the two of them actually finished year one.
+    const facts = funComparisons(withDistance(5140));
+    assert.equal(facts.length, 5);
+    assert.ok(facts.every((f) => f.text && f.emoji), JSON.stringify(facts));
+
+    // Paris leads, because that is the one they are actually booking.
+    assert.equal(facts[0].id, 'paris');
+    assert.match(facts[0].text, /Wrexham to Paris and back, 4\.3 times/);
+    assert.match(facts[1].text, /Land's End to John o' Groats/);
+    assert.match(facts[2].text, /The length of Wales, 19 times/);
+});
+
+test('the planet always closes it, as a share until it is lapped', () => {
+    const facts = funComparisons(withDistance(5140));
+    const last = facts[facts.length - 1];
+    assert.equal(last.id, 'world');
+    assert.match(last.text, /12\.8% of the way round the world/);
+
+    // Once round, it counts laps instead of percentages.
+    const lapped = funComparisons(withDistance(EARTH_KM * 2.4));
+    const far = lapped[lapped.length - 1];
+    assert.equal(far.id, 'world');
+    assert.match(far.text, /Right round the world, 2\.4 times/);
+});
+
+test('a comparison it has barely made is left out', () => {
+    // 700km is more than half way to Paris and back, but not once round.
+    const facts = funComparisons(withDistance(700));
+    assert.ok(!facts.some((f) => f.id === 'paris'), JSON.stringify(facts.map((f) => f.id)));
+    assert.ok(facts.every((f) => f.id === 'world' || f.n >= 1));
+    // The planet line is still there, honest about how small the share is.
+    assert.match(facts[facts.length - 1].text, /% of the way round the world/);
+});
+
+test('a tiny year still says something rather than nothing', () => {
+    const facts = funComparisons(withDistance(60));
+    assert.ok(facts.length >= 1);
+    assert.equal(facts[facts.length - 1].id, 'world');
+    assert.ok(facts.every((f) => !/NaN|Infinity|undefined/.test(f.text)), JSON.stringify(facts));
+});
+
+test('the numbers read as words, not decimals, where it matters', () => {
+    const wales = (km) => funComparisons(withDistance(km)).find((f) => f.id === 'wales').text;
+    // "1.0 times" and "2.0 times" read badly, so they get names.
+    assert.equal(wales(274), 'The length of Wales, once');
+    assert.equal(wales(548), 'The length of Wales, twice');
+    // Big multiples round off rather than trailing a pointless decimal.
+    assert.equal(wales(27400), 'The length of Wales, 100 times');
+    assert.match(wales(1000), /The length of Wales, 3\.6 times/);
+});
+
+test('every comparison is a real distance, biggest-feeling first', () => {
+    assert.ok(FUN_COMPARISONS.every((c) => (c.km > 0) !== (c.steps > 0)), 'each is km or steps, not both');
+    assert.ok(FUN_COMPARISONS.every((c) => typeof c.phrase === 'function'));
+    assert.equal(new Set(FUN_COMPARISONS.map((c) => c.id)).size, FUN_COMPARISONS.length);
+    // The M25 is not in here. That was the boring one.
+    assert.ok(!FUN_COMPARISONS.some((c) => /M25/i.test(c.id)));
+});
+
+test('the big number slide has time to read five lines', () => {
+    const w = wrapped();
+    const slide = buildSlides(w).find((s) => s.id === 'bigNumber');
+    assert.equal(slide.duration, 12000);
+});
+
 // --- the map tour ----------------------------------------------------------
 
 const place = (name, lat, lng, day, logs = 1) => ({
@@ -731,9 +804,10 @@ test('the map slide gets twice as long to fly round', () => {
     const w = wrapped();
     const places = buildSlides(w).find((s) => s.id === 'places');
     assert.equal(places.duration, 16000);
-    // Every other timed slide is well under that.
+    // And it is the longest thing in the show, by some way.
     const others = buildSlides(w).filter((s) => s.id !== 'places' && Number.isFinite(s.duration));
-    assert.ok(others.every((s) => s.duration <= 10000));
+    assert.ok(others.every((s) => s.duration < places.duration),
+        `longest other slide: ${Math.max(...others.map((s) => s.duration))}`);
 });
 
 // --- edge cases ------------------------------------------------------------
