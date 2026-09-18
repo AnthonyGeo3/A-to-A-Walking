@@ -98,6 +98,9 @@ export function computeWrapped(logs, yearN, opts = {}) {
     // from its biggest day — the shot out of the aeroplane window is at the same
     // place as the one of the two of you at the wedding.
     const featured = opts.featured || {};
+    const featuredMissing = [];
+    // The one part of this that isn't arithmetic.
+    const signoff = opts.signoff || null;
 
     const start = challengeYearStart(yearN);
     const end = challengeYearEnd(yearN);
@@ -171,6 +174,10 @@ export function computeWrapped(logs, yearN, opts = {}) {
         // Where next year's annual journey restarts from — the finale hands over
         // to it.
         firstMilestone: milestones[0] || null,
+        signoff,
+        // Pins that named a day with no photo on it. Falling back silently is how
+        // you end up staring at the wrong picture wondering why.
+        featuredMissing,
         // Resolved here rather than in the slide, so it is checked against the
         // real logs and quietly ignored if the day named has no photo on it.
         featured: resolveFeatured(),
@@ -411,6 +418,7 @@ export function computeWrapped(logs, yearN, opts = {}) {
                 l.photoUrl && dayKey(l.date) === want.date &&
                 (!want.userId || l.userId === want.userId));
             if (match) out[slide] = match;
+            else featuredMissing.push({ slide, ...want });
         });
         return out;
     }
@@ -903,19 +911,21 @@ const FINALE_SLIDE = {
         wash: ['#9333ea', '#22c55e'],
         render(stats, ctx) {
             const wrap = el('div');
-            const next = stats.firstMilestone
-                ? `Next stop on the annual journey: <strong>${stats.firstMilestone.label}</strong>`
-                : 'The annual journey begins again from zero.';
+            wrap.append(el('div', 'wrapped-big wrapped-rise', `${yearWord(stats.year + 1)} starts now.`));
 
-            wrap.append(
-                el('div', 'wrapped-eyebrow wrapped-rise', `That was ${yearWord(stats.year).toLowerCase()}`),
-                delay(el('div', 'wrapped-big wrapped-rise', `${yearWord(stats.year + 1)} starts now.`), 200),
-                delay(el('div', 'wrapped-mid wrapped-rise', next), 500),
-                delay(el('div', 'wrapped-sub wrapped-rise',
-                    'From tomorrow, these days start turning up in <em>A year ago today</em>.'), 800)
-            );
+            // A note from one of them to the other. It is the last thing on
+            // screen and the only part of this that isn't arithmetic, so it gets
+            // room to itself.
+            if (stats.signoff && stats.signoff.message) {
+                wrap.append(delay(el('div', 'wrapped-note-body wrapped-rise',
+                    esc(stats.signoff.message)), 500));
+                if (stats.signoff.from) {
+                    wrap.append(delay(el('div', 'wrapped-signoff wrapped-rise',
+                        esc(stats.signoff.from)), 1000));
+                }
+            }
 
-            const actions = delay(el('div', 'wrapped-actions wrapped-rise'), 1100);
+            const actions = delay(el('div', 'wrapped-actions wrapped-rise'), 1500);
             const replay = el('button', 'wrapped-btn', '↻ Replay');
             replay.addEventListener('click', ctx.replay);
             actions.append(replay);
@@ -1191,13 +1201,9 @@ const CALENDAR_SLIDE = {
         grid.innerHTML = yearHeatmapHtml(stats, { dark: true, readout: false });
         wrap.append(grid);
 
-        const busiest = ['user1', 'user2']
-            .map((uid) => ({ uid, n: stats[uid].daysLogged }))
-            .sort((a, b) => b.n - a.n)[0];
-        wrap.append(delay(el('div', 'wrapped-sub wrapped-rise',
-            `<span class="${busiest.uid === 'user1' ? 'wrapped-ant' : 'wrapped-amy'}">${esc(stats.names[busiest.uid])}</span>
-             logged <strong>${fmt(busiest.n)}</strong> of ${stats.daysInYear} days &middot;
-             brighter is further walked`), 900));
+        // No caption: the grids say it themselves. Counting days logged stops
+        // meaning anything once the answer is "all of them", and both names are
+        // already above their own grid.
         return wrap;
     }
 };
@@ -1322,14 +1328,18 @@ const PLACES_SLIDE = {
     }
 };
 
-// A pinned photo wins; otherwise the busiest day at that place, which is more
-// likely to be the day you were actually doing something than the first log
-// that happens to carry a picture.
+// A pinned photo wins outright. It used to have to belong to the furthest place
+// as well, which quietly threw the pin away: a trip abroad is logged as a dozen
+// separate places, the furthest of them turns out to be the airport, and the
+// picture worth showing was taken at the hotel four days later. Pinning is a
+// person overriding the arithmetic, so the arithmetic does not get a veto.
+// Failing a pin, the busiest day at that place, which is more likely to be a day
+// out than the first log that happens to carry a picture.
 function furthestPhoto(stats) {
+    const pinned = stats.featured && stats.featured.furthest;
+    if (pinned) return pinned;
     const trip = stats.both.places.find((p) => p.isTrip);
     if (!trip) return null;
-    const pinned = stats.featured && stats.featured.furthest;
-    if (pinned && trip.logs.some((l) => l.id === pinned.id)) return pinned;
     return trip.logs
         .filter((l) => l.photoUrl)
         .sort((a, b) => b.steps - a.steps || String(a.id).localeCompare(String(b.id)))[0] || null;
@@ -1362,7 +1372,13 @@ const FURTHEST_SLIDE = {
             const img = el('img');
             img.src = photo.photoUrl;
             img.alt = '';
-            card.append(img, el('div', 'wrapped-cap', `${esc(top.name)} &middot; ${fmtDayMonth(photo.date)}`));
+            // A pinned photo may have been taken somewhere other than the
+            // furthest pin itself, so the caption describes the picture rather
+            // than the headline underneath it.
+            const shotAt = photo.locationName
+                ? String(photo.locationName).split(',')[0].trim()
+                : top.name;
+            card.append(img, el('div', 'wrapped-cap', `${esc(shotAt)} &middot; ${fmtDayMonth(photo.date)}`));
             row.append(card);
             wrap.append(row);
         }

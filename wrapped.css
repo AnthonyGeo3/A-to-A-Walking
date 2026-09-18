@@ -773,3 +773,23 @@ body.wrapped-lock { overflow: hidden; }
 .wrapped-heat .recap-heat-cell { background: rgba(255, 255, 255, 0.08); cursor: default; }
 .wrapped-heat .recap-heat-cell.is-void { background: transparent; }
 .wrapped-heat .recap-heat-label { color: rgba(255, 255, 255, 0.4); }
+
+/* --- the note at the end -------------------------------------------------- */
+/* The last thing on screen and the only part that isn't arithmetic, so it gets
+   room and a softer weight than the line above it. */
+
+.wrapped-note-body {
+    font-size: clamp(1rem, 4.4vw, 1.25rem);
+    font-weight: 500;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.92);
+    max-width: 24ch;
+    margin: 12px auto 0;
+}
+.wrapped-signoff {
+    font-size: clamp(1rem, 4.4vw, 1.25rem);
+    font-weight: 700;
+    line-height: 1.4;
+    /* Room on both sides: the signature should not look like a button label. */
+    margin: 16px auto 14px;
+}
