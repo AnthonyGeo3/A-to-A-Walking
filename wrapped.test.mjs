@@ -499,7 +499,7 @@ test('the running order runs cover, big number, months, race, finale', () => {
     assert.deepEqual(slides.map((s) => s.id), [
         'cover', 'bigNumber',
         ...Array.from({ length: 12 }, (_, i) => `month-${i}`),
-        'race', 'bestDays', 'habits', 'places', 'furthest', 'passport',
+        'race', 'bestDays', 'habits', 'calendar', 'places', 'furthest', 'passport',
         'quotes', 'awards', 'photoWall', 'stretch', 'finale'
     ]);
 });
@@ -610,6 +610,56 @@ test('month slides declare the photos to preload', () => {
     assert.deepEqual(buildSlides(w).find((s) => s.id === 'month-1').images(w), []);
 });
 
+test('the calendar slide needs days on it', () => {
+    const w = wrapped();
+    const find = (id, stats) => buildSlides(stats).find((s) => s.id === id);
+    assert.equal(find('calendar', w).skip(w), false);
+    assert.equal(find('calendar', w).duration, 10000);
+
+    const nothing = computeWrapped([], 1, OPTS);
+    assert.equal(find('calendar', nothing).skip(nothing), true);
+});
+
+test('a pinned photo wins, and a bad one is ignored', () => {
+    // Amy's Edinburgh log has no photo, so it cannot be pinned.
+    const w = computeWrapped(buildFixture(), 1,
+        { ...OPTS, featured: { furthest: { date: '2026-05-15' } } });
+    assert.deepEqual(w.featured, {}, 'a day with no photo does not resolve');
+
+    // The Lisbon log does, and it is the furthest place.
+    const pinned = computeWrapped(buildFixture(), 1,
+        { ...OPTS, featured: { furthest: { date: '2026-07-10', userId: 'user1' } } });
+    assert.equal(pinned.featured.furthest.id, 'u1-2026-07-10');
+
+    // Naming the wrong person does not resolve either.
+    const wrongPerson = computeWrapped(buildFixture(), 1,
+        { ...OPTS, featured: { furthest: { date: '2026-07-10', userId: 'user2' } } });
+    assert.deepEqual(wrongPerson.featured, {});
+
+    // And with nothing pinned at all, it stays empty rather than undefined.
+    assert.deepEqual(wrapped().featured, {});
+});
+
+test('month photos come from different days where there is a choice', () => {
+    // Both of them photograph the same walk on the same day, twice over.
+    const logs = buildFixture().map((l) => ({ ...l, photoUrl: undefined }));
+    const sameDay = '2026-03-05';
+    const other = '2026-03-19';
+    logs.forEach((l) => {
+        if (l.id === `u1-${sameDay}` || l.id === `u2-${sameDay}`) l.photoUrl = `https://example.test/${l.id}.jpg`;
+        if (l.id === `u1-${other}` || l.id === `u2-${other}`) l.photoUrl = `https://example.test/${l.id}.jpg`;
+    });
+    const w = computeWrapped(logs, 1, OPTS);
+    const march = w.months.find((m) => m.label.startsWith('March'));
+    assert.equal(march.photos.length, 3);
+
+    const days = march.photos.map((p) => p.date.getDate());
+    assert.equal(new Set(days).size, 2, `spread over ${new Set(days).size} days: ${days}`);
+    // Two different people on the first day, then the other day — not three
+    // pictures of the same afternoon.
+    assert.ok(days.filter((d) => d === days[0]).length <= 2);
+});
+
 test('quotes, the wall and goals stand down when there is too little', () => {
     const w = wrapped();
     const find = (id, stats) => buildSlides(stats).find((s) => s.id === id);
@@ -674,9 +724,11 @@ test('a real year gets five things worth saying', () => {
     assert.equal(facts.length, 5);
     assert.ok(facts.every((f) => f.text && f.emoji), JSON.stringify(facts));
 
-    // Paris leads, because that is the one they are actually booking.
+    // Paris leads, because that is the one they are actually booking — one way,
+    // which is how anyone would say it.
     assert.equal(facts[0].id, 'paris');
-    assert.match(facts[0].text, /Wrexham to Paris and back, 4\.3 times/);
+    assert.match(facts[0].text, /Wrexham to Paris, 8\.6 times/);
+    assert.ok(!/and back/.test(facts[0].text));
     assert.match(facts[1].text, /Land's End to John o' Groats/);
     assert.match(facts[2].text, /The length of Wales, 19 times/);
 });
@@ -695,8 +747,8 @@ test('the planet always closes it, as a share until it is lapped', () => {
 });
 
 test('a comparison it has barely made is left out', () => {
-    // 700km is more than half way to Paris and back, but not once round.
-    const facts = funComparisons(withDistance(700));
+    // 400km is two thirds of the way to Paris, which is not a thing to boast of.
+    const facts = funComparisons(withDistance(400));
     assert.ok(!facts.some((f) => f.id === 'paris'), JSON.stringify(facts.map((f) => f.id)));
     assert.ok(facts.every((f) => f.id === 'world' || f.n >= 1));
     // The planet line is still there, honest about how small the share is.

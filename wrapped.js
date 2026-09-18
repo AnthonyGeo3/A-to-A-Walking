@@ -93,6 +93,11 @@ export function computeWrapped(logs, yearN, opts = {}) {
     const stretchGoals = opts.stretch || {};
     const home = opts.home || HOME;
     const now = opts.now instanceof Date ? opts.now : new Date();
+    // Hand-picked photos, keyed by slide. Automatic picking can only go on step
+    // counts and distances, and the best picture of a trip is not always the one
+    // from its biggest day — the shot out of the aeroplane window is at the same
+    // place as the one of the two of you at the wedding.
+    const featured = opts.featured || {};
 
     const start = challengeYearStart(yearN);
     const end = challengeYearEnd(yearN);
@@ -166,6 +171,9 @@ export function computeWrapped(logs, yearN, opts = {}) {
         // Where next year's annual journey restarts from — the finale hands over
         // to it.
         firstMilestone: milestones[0] || null,
+        // Resolved here rather than in the slide, so it is checked against the
+        // real logs and quietly ignored if the day named has no photo on it.
+        featured: resolveFeatured(),
         // Convenience flags so a slide can skip itself without re-deriving this.
         hasPhotos: both.photoCount > 0,
         hasPlaces: allPlaces.length > 0,
@@ -391,6 +399,22 @@ export function computeWrapped(logs, yearN, opts = {}) {
         };
     }
 
+    // A pinned photo only counts if the day named actually has one. Anything
+    // that does not resolve is dropped, so a typo or a deleted photo falls back
+    // to the automatic pick rather than leaving a hole.
+    function resolveFeatured() {
+        const out = {};
+        Object.keys(featured).forEach((slide) => {
+            const want = featured[slide];
+            if (!want || !want.date) return;
+            const match = inYear.find((l) =>
+                l.photoUrl && dayKey(l.date) === want.date &&
+                (!want.userId || l.userId === want.userId));
+            if (match) out[slide] = match;
+        });
+        return out;
+    }
+
     function monthLabelFor(i) {
         const y = CHALLENGE_START_YEAR + yearN - 1 + (i <= 2 ? 0 : 1);
         const m = (9 + i) % 12;
@@ -509,6 +533,9 @@ export function computeWrapped(logs, yearN, opts = {}) {
 
     // Up to three photos a month, alternating between the two of you where both
     // have something, biggest days first, with a nudge for anywhere far from home.
+    // Where there is a choice, they come from different days: the two of you on
+    // the same walk tend to photograph the same thing, and three near-identical
+    // pictures is a worse slide than three ordinary ones.
     function pickMonthPhotos(monthLogs) {
         const score = (l) => {
             const place = allPlaces.find((p) => p.logs.includes(l));
@@ -523,12 +550,22 @@ export function computeWrapped(logs, yearN, opts = {}) {
         });
 
         const out = [];
+        const usedDays = new Set();
+        // Take this queue's best photo from a day not already on the slide, or
+        // its best remaining one if every candidate it has left is a repeat day.
+        const takeFrom = (queue) => {
+            const fresh = queue.findIndex((c) => !usedDays.has(dayKey(c.log.date)));
+            const [picked] = queue.splice(fresh >= 0 ? fresh : 0, 1);
+            usedDays.add(dayKey(picked.log.date));
+            return picked.log;
+        };
+
         // Start with whoever has the single strongest photo that month.
         let turn = (queues.user1[0]?.score || -1) >= (queues.user2[0]?.score || -1) ? 'user1' : 'user2';
         while (out.length < 3 && (queues.user1.length || queues.user2.length)) {
             const other = turn === 'user1' ? 'user2' : 'user1';
             const from = queues[turn].length ? turn : other;
-            out.push(queues[from].shift().log);
+            out.push(takeFrom(queues[from]));
             turn = from === 'user1' ? 'user2' : 'user1';
         }
         return out;
@@ -683,8 +720,8 @@ function countPhrase(n) {
 }
 
 export const FUN_COMPARISONS = [
-    { id: 'paris', emoji: '🗼', km: WREXHAM_TO_PARIS_KM * 2,
-      phrase: (n) => `Wrexham to Paris and back, ${timesPhrase(n)}` },
+    { id: 'paris', emoji: '🗼', km: WREXHAM_TO_PARIS_KM,
+      phrase: (n) => `Wrexham to Paris, ${timesPhrase(n)}` },
     { id: 'lejog', emoji: '🥾', km: 1407,
       phrase: (n) => `Land's End to John o' Groats, ${timesPhrase(n)}` },
     { id: 'wales', emoji: '🐉', km: 274,
@@ -1139,6 +1176,32 @@ export function buildMapTour(places, opts = {}) {
     return [...keep].sort(byDate);
 }
 
+const CALENDAR_SLIDE = {
+    id: 'calendar',
+    duration: 10000,
+    wash: ['#22c55e', '#9333ea'],
+    skip: (stats) => !stats.both.daysLogged,
+    render(stats) {
+        const wrap = el('div');
+        wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'Every day of it'));
+
+        // The same grid as the recap, on the dark surface and with no tap
+        // readout, because on a slide a tap means "next".
+        const grid = delay(el('div', 'wrapped-heat wrapped-rise'), 200);
+        grid.innerHTML = yearHeatmapHtml(stats, { dark: true, readout: false });
+        wrap.append(grid);
+
+        const busiest = ['user1', 'user2']
+            .map((uid) => ({ uid, n: stats[uid].daysLogged }))
+            .sort((a, b) => b.n - a.n)[0];
+        wrap.append(delay(el('div', 'wrapped-sub wrapped-rise',
+            `<span class="${busiest.uid === 'user1' ? 'wrapped-ant' : 'wrapped-amy'}">${esc(stats.names[busiest.uid])}</span>
+             logged <strong>${fmt(busiest.n)}</strong> of ${stats.daysInYear} days &middot;
+             brighter is further walked`), 900));
+        return wrap;
+    }
+};
+
 const PLACES_SLIDE = {
     id: 'places',
     // Twice as long as the rest: this one has somewhere to go.
@@ -1259,21 +1322,33 @@ const PLACES_SLIDE = {
     }
 };
 
+// A pinned photo wins; otherwise the busiest day at that place, which is more
+// likely to be the day you were actually doing something than the first log
+// that happens to carry a picture.
+function furthestPhoto(stats) {
+    const trip = stats.both.places.find((p) => p.isTrip);
+    if (!trip) return null;
+    const pinned = stats.featured && stats.featured.furthest;
+    if (pinned && trip.logs.some((l) => l.id === pinned.id)) return pinned;
+    return trip.logs
+        .filter((l) => l.photoUrl)
+        .sort((a, b) => b.steps - a.steps || String(a.id).localeCompare(String(b.id)))[0] || null;
+}
+
 const FURTHEST_SLIDE = {
     id: 'furthest',
     duration: 6000,
     wash: ['#f59e0b', '#0ea5e9'],
     skip: (stats) => !stats.both.places.some((p) => p.isTrip),
     images: (stats) => {
-        const trip = stats.both.places.find((p) => p.isTrip);
-        const withPhoto = trip && trip.logs.find((l) => l.photoUrl);
-        return withPhoto ? [withPhoto.photoUrl] : [];
+        const photo = furthestPhoto(stats);
+        return photo ? [photo.photoUrl] : [];
     },
     render(stats) {
         const trips = stats.both.places.filter((p) => p.isTrip); // already furthest-first
         const top = trips[0];
         const first = top.logs.slice().sort((a, b) => a.date - b.date)[0];
-        const photo = top.logs.find((l) => l.photoUrl);
+        const photo = furthestPhoto(stats);
 
         const wrap = el('div');
         wrap.append(el('div', 'wrapped-eyebrow wrapped-rise', 'Furthest from home'));
@@ -1609,6 +1684,7 @@ export function buildSlides(stats) {
         RACE_SLIDE,
         BEST_DAYS_SLIDE,
         HABITS_SLIDE,
+        CALENDAR_SLIDE,
         PLACES_SLIDE,
         FURTHEST_SLIDE,
         PASSPORT_SLIDE,
@@ -1647,21 +1723,62 @@ const AMBIENCE_LEVEL = 0.55;
 
 const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
-// Eight bars of a I-vi-ii-V turnaround in C, with a secondary dominant in the
-// middle so it doesn't just chase its own tail. The bass line walks in crotchets
-// and ends each bar on a note that leans into the next chord's root; the comp is
-// rootless voicings, which is what leaves room for the bass.
-const JAZZ_BARS = [
-    { name: 'Cmaj9', bass: [48, 52, 55, 56], comp: [52, 55, 59, 62], melody: curveTop(71) },
-    { name: 'Am9',   bass: [45, 48, 52, 51], comp: [48, 52, 55, 59], melody: null },
-    { name: 'Dm7',   bass: [50, 53, 57, 56], comp: [53, 57, 60, 64], melody: curveTop(69) },
-    { name: 'G13',   bass: [43, 47, 50, 53], comp: [53, 59, 64],     melody: null },
-    { name: 'Em9',   bass: [52, 55, 59, 58], comp: [55, 59, 62, 66], melody: curveTop(74) },
-    { name: 'A13',   bass: [45, 49, 52, 51], comp: [55, 61, 66],     melody: curveTop(73) },
-    { name: 'Dm7',   bass: [50, 53, 57, 56], comp: [53, 57, 60, 64], melody: null },
-    { name: 'G13',   bass: [43, 47, 50, 47], comp: [53, 59, 64],     melody: curveTop(67) }
+// Each bar carries a walking bass line in crotchets, a rootless voicing for the
+// comp, and a scrap of tune. `tune` entries are [beat, note] — a beat of 2.67
+// is the swung "and" of three. Voicings are rootless because that is what
+// leaves room for the bass to walk underneath.
+
+// A — a I-vi-ii-V turnaround in C, with a secondary dominant in the middle so
+// it doesn't just chase its own tail.
+const SECTION_A = [
+    { bass: [48, 52, 55, 56], comp: [52, 55, 59, 62], tune: [[0, 64], [2.67, 67]] },
+    { bass: [45, 48, 52, 51], comp: [48, 52, 55, 59], tune: [[1, 69]] },
+    { bass: [50, 53, 57, 56], comp: [53, 57, 60, 64], tune: [[0, 65], [2.67, 69]] },
+    { bass: [43, 47, 50, 53], comp: [53, 59, 64],     tune: [[1, 67]] },
+    { bass: [52, 55, 59, 58], comp: [55, 59, 62, 66], tune: [[0, 62], [2.67, 66]] },
+    { bass: [45, 49, 52, 51], comp: [55, 61, 66],     tune: [[1, 64]] },
+    { bass: [50, 53, 57, 56], comp: [53, 57, 60, 64], tune: [[0, 62], [2.67, 65]] },
+    { bass: [43, 47, 50, 47], comp: [53, 59, 64],     tune: [[1, 60]] }
 ];
-function curveTop(n) { return n; }
+
+// B — the bridge, over to F and back, so the thing goes somewhere before it
+// comes home. This is what stops eighty seconds of loop feeling like a loop.
+const SECTION_B = [
+    { bass: [41, 45, 48, 49], comp: [57, 60, 64, 67], tune: [[0, 69], [2.67, 72]] },
+    { bass: [50, 48, 45, 44], comp: [53, 57, 60, 64], tune: [[1, 71]] },
+    { bass: [43, 46, 50, 49], comp: [53, 58, 62],     tune: [[0, 70], [2.67, 74]] },
+    { bass: [48, 46, 45, 42], comp: [58, 64, 69],     tune: [[1, 72]] },
+    { bass: [41, 45, 48, 49], comp: [57, 60, 64, 67], tune: [[0, 69], [2.67, 67]] },
+    { bass: [50, 48, 45, 44], comp: [53, 57, 60, 64], tune: [[1, 65]] },
+    { bass: [43, 47, 50, 49], comp: [53, 59, 62, 65], tune: [[0, 64], [2.67, 62]] },
+    { bass: [48, 52, 55, 47], comp: [58, 64, 69],     tune: [[1, 60]] }
+];
+
+// AABA: thirty-two bars, eighty seconds, which over a three-minute show is two
+// and a bit choruses rather than nine goes round the same eight bars.
+const FORM = [SECTION_A, SECTION_A, SECTION_B, SECTION_A];
+const CHORUS_BARS = FORM.length * 8;
+
+export function barAt(n) {
+    const pos = ((n % CHORUS_BARS) + CHORUS_BARS) % CHORUS_BARS;
+    return FORM[Math.floor(pos / 8)][pos % 8];
+}
+
+// The arrangement thins out at the start and fills in as it goes, so the same
+// thirty-two bars don't arrive identically the second and third time round.
+export function textureAt(n) {
+    const chorus = Math.floor(n / CHORUS_BARS);
+    const pos = n % CHORUS_BARS;
+    return {
+        // Let the groove establish itself for eight bars before any tune.
+        tune: !(chorus === 0 && pos < 8),
+        // The second comp hit joins after the first four bars.
+        fullComp: !(chorus === 0 && pos < 4),
+        // An octave above the tune, from the second chorus, on the bridge and
+        // the last A — the part that should feel like it is building.
+        shimmer: chorus >= 1 && pos >= 16
+    };
+}
 
 export function createAmbience() {
     let ctx = null;
@@ -1671,7 +1788,7 @@ export function createAmbience() {
     let nextAt = 0;
     let muted = false;
     // Seeded, so the same little timing and velocity wobbles happen every time
-    // rather than the pad sounding different on every replay.
+    // rather than it sounding different on every replay.
     let seed = 20261001;
     const rnd = () => {
         seed = (seed * 1664525 + 1013904223) % 4294967296;
@@ -1702,8 +1819,9 @@ export function createAmbience() {
         strike(midi(note + 12), when, { level: level * 0.3, decay: 0.9, type: 'sine' });
     }
 
-    function playBar(spec, when) {
-        // Walking bass, one note a beat. This is the pulse the whole thing hangs on.
+    function playBar(spec, when, texture) {
+        // Walking bass, one note a beat. This is the pulse the whole thing
+        // hangs on, and it never thins out.
         spec.bass.forEach((note, i) => {
             strike(midi(note), when + i * BEAT + human(0.012), {
                 level: 0.2 + human(0.03), decay: 0.62, type: 'triangle'
@@ -1712,18 +1830,20 @@ export function createAmbience() {
 
         // Comp on the "and" of two and on four — off the beat, which is where
         // jazz piano sits and why it swings rather than marches.
-        [BEAT + SWING, BEAT * 3].forEach((offset, hit) => {
+        const hits = texture.fullComp ? [BEAT + SWING, BEAT * 3] : [BEAT + SWING];
+        hits.forEach((offset, hit) => {
             const level = (hit === 0 ? 0.052 : 0.044) + human(0.008);
             spec.comp.forEach((note) => rhodes(note, when + offset + human(0.014), level));
         });
 
-        // A single vibraphone note over the top of some bars, on the "and" of
-        // four, so it leans into the next bar.
-        if (spec.melody != null) {
-            strike(midi(spec.melody), when + BEAT * 3 + SWING + human(0.02), {
-                level: 0.075, decay: 2.2, type: 'sine'
-            });
-        }
+        if (!texture.tune) return;
+        spec.tune.forEach(([beat, note]) => {
+            const at = when + beat * BEAT + human(0.02);
+            strike(midi(note), at, { level: 0.08, decay: 2.2, type: 'sine' });
+            if (texture.shimmer) {
+                strike(midi(note + 12), at, { level: 0.022, decay: 1.6, type: 'sine' });
+            }
+        });
     }
 
     // Bars are booked against the audio clock well ahead of being heard, and a
@@ -1733,7 +1853,7 @@ export function createAmbience() {
         if (!ctx) return;
         const horizon = ctx.currentTime + SCHEDULE_AHEAD;
         while (nextAt < horizon) {
-            playBar(JAZZ_BARS[bar % JAZZ_BARS.length], nextAt);
+            playBar(barAt(bar), nextAt, textureAt(bar));
             bar += 1;
             nextAt += BAR;
         }
@@ -2038,7 +2158,7 @@ function percentile(values, p) {
 
 // A whole year at a glance: twelve rows, one per month, thirty-one columns.
 // GitHub's 53-column layout does not fit a portrait phone, and this one does.
-export function yearHeatmapHtml(stats) {
+export function yearHeatmapHtml(stats, { dark = false, readout = true } = {}) {
     const days = stats.race.days;
     if (!days.length) return '';
 
@@ -2067,7 +2187,9 @@ export function yearHeatmapHtml(stats) {
                 const entry = rows.find((r) => r.date.getDate() === dayNum);
                 if (!entry) { html += '<div class="recap-heat-cell is-void"></div>'; continue; }
                 const steps = entry.day[uid];
-                const intensity = steps > 0 ? Math.max(0.16, Math.min(1, steps / cap)) : 0;
+                // A faint green over near-black disappears, so the floor is
+                // higher on the dark surface than on the white page.
+                const intensity = steps > 0 ? Math.max(dark ? 0.32 : 0.16, Math.min(1, steps / cap)) : 0;
                 const bg = steps > 0 ? `rgba(${rgb}, ${intensity.toFixed(2)})` : '';
                 html += `<div class="recap-heat-cell" style="${bg ? `background:${bg}` : ''}"
                     data-steps="${steps}" data-who="${esc(stats.names[uid])}"
@@ -2077,16 +2199,18 @@ export function yearHeatmapHtml(stats) {
         return html + '</div>';
     };
 
+    const antInk = dark ? '#4ade80' : '#15803d';
+    const amyInk = dark ? '#c084fc' : '#7e22ce';
     return `
         <div class="recap-heat-block">
-            <p class="recap-heat-name" style="color:#15803d">${esc(stats.names.user1)}</p>
+            <p class="recap-heat-name" style="color:${antInk}">${esc(stats.names.user1)}</p>
             ${grid('user1', HEAT_ANT)}
         </div>
         <div class="recap-heat-block">
-            <p class="recap-heat-name" style="color:#7e22ce">${esc(stats.names.user2)}</p>
+            <p class="recap-heat-name" style="color:${amyInk}">${esc(stats.names.user2)}</p>
             ${grid('user2', HEAT_AMY)}
         </div>
-        <p class="recap-heat-readout" data-readout>Tap a day</p>`;
+        ${readout ? '<p class="recap-heat-readout" data-readout>Tap a day</p>' : ''}`;
 }
 
 /** The recap section's markup. Pure — no DOM, so it can be checked in node. */

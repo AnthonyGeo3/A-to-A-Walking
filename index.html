@@ -2221,6 +2221,15 @@
         const WRAPPED_FORCE_OPEN = wrappedFlag === '1';
         let wrappedAutoChecked = false;
 
+        // Photos hand-picked for particular slides, named by the day they were
+        // taken. Automatic picking can only go on step counts and distance, which
+        // put the shot out of the aeroplane window on the "furthest from home"
+        // slide instead of the two of us at the wedding. A day named here that
+        // has no photo on it is quietly ignored.
+        const WRAPPED_FEATURED = {
+            furthest: { userId: 'user1', date: '2026-04-07' }
+        };
+
         const wrappedSeenKey = (n) => `a2a-wrapped-seen-y${n}`;
         // localStorage throws in private mode. Failing to read just means it offers
         // again, which is a far better failure than the show never appearing.
@@ -2258,7 +2267,8 @@
                 names: { user1: userData.user1.name, user2: userData.user2.name },
                 milestones: MASTER_MILESTONES,
                 milestoneDates: getMilestoneAchievementDates().annual,
-                stretch: { user1: getStretch('user1'), user2: getStretch('user2') }
+                stretch: { user1: getStretch('user1'), user2: getStretch('user2') },
+                featured: WRAPPED_FEATURED
             });
         }
 
