@@ -214,8 +214,10 @@ body.wrapped-lock { overflow: hidden; }
 }
 .wrapped-banner .wrapped-banner-gift { font-size: 22px; }
 .wrapped-banner .wrapped-banner-text { flex: 1; min-width: 0; }
-.wrapped-banner .wrapped-banner-title { font-weight: 800; font-size: 14px; }
-.wrapped-banner .wrapped-banner-sub { font-size: 11px; color: rgba(255, 255, 255, 0.65); }
+/* Both are spans, and an inline span will not stack — without this the title and
+   the line under it run together on one line. */
+.wrapped-banner .wrapped-banner-title { display: block; font-weight: 800; font-size: 14px; }
+.wrapped-banner .wrapped-banner-sub { display: block; font-size: 11px; color: rgba(255, 255, 255, 0.65); }
 .wrapped-banner .wrapped-banner-go {
     font-size: 12px;
     font-weight: 700;
