@@ -2233,7 +2233,7 @@
         // The note on the last slide. Change it each year — it is the only part
         // of the whole thing that isn't worked out from the logs.
         const WRAPPED_SIGNOFF = {
-            message: "Thank you for spending that last year with me, I'm excited to see what we get up to next year",
+            message: 'Thank you for a wonderful year, excited to see what we get up to next',
             from: 'love Ant'
         };
 
@@ -2280,13 +2280,25 @@
             });
         }
 
+        // A preview plays a year that isn't over, so the recap section below is
+        // still hidden — which left "See the recap" at the end of the show
+        // scrolling to nothing at all. Playing it early unlocks the recap for
+        // this session only; a reload puts it back out of sight, so nothing is
+        // given away to anyone who didn't ask for it.
+        let wrappedRecapUnlocked = false;
+
         // The most recent year with a Wrapped, or null before the first one ends.
-        function latestWrappedYear() {
-            const years = wrappedYears(new Date(), { preview: WRAPPED_PREVIEW });
+        function latestWrappedYear({ preview = WRAPPED_PREVIEW } = {}) {
+            const years = wrappedYears(new Date(), { preview });
             return years.length ? years[years.length - 1] : null;
         }
 
         function playWrapped(n, { record = !WRAPPED_PREVIEW } = {}) {
+            // Not recording means this is a preview, by URL flag or long press.
+            if (!record && !wrappedRecapUnlocked) {
+                wrappedRecapUnlocked = true;
+                renderWrappedRecap();
+            }
             const stats = buildWrappedStats(n);
             if (stats.featuredMissing && stats.featuredMissing.length) {
                 console.warn('[A-to-A] A pinned photo did not match any log with a picture on it:',
@@ -2322,7 +2334,7 @@
             const section = document.getElementById('wrapped-recap-section');
             const host = document.getElementById('wrapped-recap');
             if (!section || !host) return;
-            const n = latestWrappedYear();
+            const n = latestWrappedYear({ preview: WRAPPED_PREVIEW || wrappedRecapUnlocked });
             if (n == null || !logData.length) { section.classList.add('hidden'); return; }
             section.classList.remove('hidden');
             document.getElementById('wrapped-recap-heading').textContent = `📖 ${yearWord(n)} Recap`;
