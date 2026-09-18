@@ -763,3 +763,13 @@ body.wrapped-lock { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
     .wrapped-equiv-row { opacity: 1; animation: none; transform: none; }
 }
+
+/* --- the year as a grid, on a slide --------------------------------------- */
+/* Same markup as the recap's, re-inked for the dark surface. The painted cells
+   carry their colour inline, so only the empty ones and the labels change. */
+
+.wrapped-heat .recap-heat-block { margin-bottom: 12px; }
+.wrapped-heat .recap-heat-name { font-size: 11px; font-weight: 800; margin-bottom: 4px; }
+.wrapped-heat .recap-heat-cell { background: rgba(255, 255, 255, 0.08); cursor: default; }
+.wrapped-heat .recap-heat-cell.is-void { background: transparent; }
+.wrapped-heat .recap-heat-label { color: rgba(255, 255, 255, 0.4); }
