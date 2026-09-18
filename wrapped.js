@@ -2229,16 +2229,27 @@ export function yearHeatmapHtml(stats, { dark = false, readout = true } = {}) {
         ${readout ? '<p class="recap-heat-readout" data-readout>Tap a day</p>' : ''}`;
 }
 
+// The year is redundant in a section that is already headed by one, and these
+// columns are half a phone wide — with it, the step count wraps to its own line.
+const monthOnly = (m) => String(m.label).replace(/\s+\d{4}$/, '');
+
 /** The recap section's markup. Pure — no DOM, so it can be checked in node. */
 export function recapHtml(stats) {
     const medals = ['🥇', '🥈', '🥉'];
     const crown = (uid) => (stats.race.winner === uid ? ' 👑' : '');
 
+    // The pair of you on the top row, one each on the bottom — and on the bottom
+    // row the left-hand tile is the same person as every other left-hand thing
+    // on the page, so the eye doesn't have to re-learn it here.
     const tiles = `
         <div class="recap-tiles">
             <div class="recap-tile">
                 <span class="recap-tile-value">${fmt(stats.both.total)}</span>
                 <span class="recap-tile-label">steps together</span>
+            </div>
+            <div class="recap-tile">
+                <span class="recap-tile-value">${fmt(stats.both.km)} km</span>
+                <span class="recap-tile-label">${fmt(stats.both.miles)} miles</span>
             </div>
             <div class="recap-tile">
                 <span class="recap-tile-value" style="color:#15803d">${fmt(stats.user1.total)}${crown('user1')}</span>
@@ -2247,10 +2258,6 @@ export function recapHtml(stats) {
             <div class="recap-tile">
                 <span class="recap-tile-value" style="color:#7e22ce">${fmt(stats.user2.total)}${crown('user2')}</span>
                 <span class="recap-tile-label">${esc(stats.names.user2)}</span>
-            </div>
-            <div class="recap-tile">
-                <span class="recap-tile-value">${fmt(stats.both.km)}</span>
-                <span class="recap-tile-label">km between you</span>
             </div>
         </div>`;
 
@@ -2272,7 +2279,7 @@ export function recapHtml(stats) {
             <p class="recap-line">${u.longest10kStreak.days > 0
                 ? `<strong>${u.longest10kStreak.days}</strong> days straight over 10k`
                 : 'No run over 10k'}</p>
-            <p class="recap-line"><strong>${fmt(u.daysLogged)}</strong> of ${stats.daysInYear} days logged</p>
+            ${u.bestMonth ? `<p class="recap-line">Best month: <strong>${esc(monthOnly(u.bestMonth))}</strong> <span class="recap-dim">${fmt(u.bestMonth.steps)}</span></p>` : ''}
             ${u.bestWeekday ? `<p class="recap-line"><strong>${esc(u.bestWeekday.name)}s</strong> are the big day</p>` : ''}
         </div>`;
     }).join('');
