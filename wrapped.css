@@ -1,0 +1,688 @@
+/* ---------------------------------------------------------------------------
+   Year Wrapped — the full-screen show
+   ---------------------------------------------------------------------------
+   Deliberately dark, against the app's pastel daytime look, so it reads as an
+   event rather than another panel. Portrait phone first; the installed PWA runs
+   standalone with a translucent status bar, so anything at the edges has to
+   clear the safe-area insets.
+   --------------------------------------------------------------------------- */
+
+body.wrapped-lock { overflow: hidden; }
+
+.wrapped-overlay {
+    position: fixed;
+    inset: 0;
+    /* Above the fullscreen map (9998) and every modal (z-50). */
+    z-index: 10000;
+    background: #0b0f1a;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh; /* iOS-friendly dynamic viewport, as the map already uses */
+    overflow: hidden;
+    font-family: 'Inter', sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+/* --- progress bar --------------------------------------------------------- */
+
+.wrapped-progress {
+    display: flex;
+    gap: 4px;
+    padding: 10px 12px 6px;
+    margin-top: env(safe-area-inset-top, 0px);
+    flex: 0 0 auto;
+    z-index: 3;
+}
+.wrapped-seg {
+    flex: 1 1 0;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.25);
+    overflow: hidden;
+}
+.wrapped-seg > i {
+    display: block;
+    height: 100%;
+    width: 100%;
+    background: #fff;
+    transform: scaleX(0);
+    transform-origin: left center;
+}
+.wrapped-seg.is-done > i { transform: scaleX(1); }
+/* The bar and the auto-advance share one clock: the slide moves on when this
+   animation ends, so they can never drift apart. */
+.wrapped-seg.is-running > i {
+    animation: wrapped-fill linear forwards;
+}
+@keyframes wrapped-fill {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+
+/* --- chrome --------------------------------------------------------------- */
+
+.wrapped-close {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 20px);
+    right: 12px;
+    z-index: 4;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.wrapped-close:hover { background: rgba(255, 255, 255, 0.22); }
+
+.wrapped-stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* --- slides --------------------------------------------------------------- */
+
+.wrapped-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px max(20px, env(safe-area-inset-left, 0px)) calc(28px + env(safe-area-inset-bottom, 0px));
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    overflow: hidden;
+}
+.wrapped-slide.is-active { opacity: 1; }
+
+/* Each slide washes the black with its own pair of colours. */
+.wrapped-slide::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(90% 60% at 18% 12%, var(--wash-a, #22c55e) 0%, transparent 62%),
+        radial-gradient(85% 60% at 85% 88%, var(--wash-b, #9333ea) 0%, transparent 62%);
+    opacity: 0.32;
+}
+.wrapped-slide > * { position: relative; z-index: 1; max-width: 640px; width: 100%; }
+
+/* --- typography ----------------------------------------------------------- */
+
+.wrapped-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+}
+.wrapped-huge {
+    font-size: clamp(3rem, 17vw, 6.5rem);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 0.92;
+    font-variant-numeric: tabular-nums;
+}
+.wrapped-big {
+    font-size: clamp(1.6rem, 8vw, 2.8rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+.wrapped-mid {
+    font-size: clamp(1rem, 4.6vw, 1.35rem);
+    font-weight: 600;
+    line-height: 1.35;
+}
+.wrapped-sub {
+    font-size: clamp(0.85rem, 3.6vw, 1rem);
+    color: rgba(255, 255, 255, 0.72);
+    line-height: 1.45;
+}
+.wrapped-hint {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+}
+.wrapped-ant { color: #4ade80; }
+.wrapped-amy { color: #c084fc; }
+
+/* Staggered entrances. Anything with a delay starts invisible, so a slide never
+   flashes its whole contents before settling. */
+.wrapped-rise {
+    opacity: 0;
+    animation: wrapped-rise 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes wrapped-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* --- buttons (the finale) ------------------------------------------------- */
+
+.wrapped-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+.wrapped-btn {
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 22px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+}
+.wrapped-btn:hover { background: rgba(255, 255, 255, 0.24); }
+.wrapped-btn-primary { background: #fff; color: #0b0f1a; }
+.wrapped-btn-primary:hover { background: #e7e7ea; }
+
+/* --- the banner on the main page ------------------------------------------ */
+
+.wrapped-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+    padding: 12px 14px;
+    border-radius: 12px;
+    color: #fff;
+    background: linear-gradient(120deg, #0b0f1a 0%, #1b2440 55%, #3b1d5e 100%);
+    box-shadow: 0 6px 18px rgba(11, 15, 26, 0.28);
+}
+.wrapped-banner .wrapped-banner-gift { font-size: 22px; }
+.wrapped-banner .wrapped-banner-text { flex: 1; min-width: 0; }
+/* Both are spans, and an inline span will not stack — without this the title and
+   the line under it run together on one line. */
+.wrapped-banner .wrapped-banner-title { display: block; font-weight: 800; font-size: 14px; }
+.wrapped-banner .wrapped-banner-sub { display: block; font-size: 11px; color: rgba(255, 255, 255, 0.65); }
+.wrapped-banner .wrapped-banner-go {
+    font-size: 12px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    padding: 6px 14px;
+    flex-shrink: 0;
+}
+
+
+/* --- month chapters ------------------------------------------------------- */
+
+.wrapped-month-name {
+    font-size: clamp(1.9rem, 9vw, 3rem);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+.wrapped-month-year {
+    font-size: 0.42em;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.55);
+    letter-spacing: 0.06em;
+    display: block;
+}
+
+/* A two-tone bar for the month's head-to-head, echoing the rivalry bar on the
+   main page but sitting on a dark background. */
+.wrapped-bar {
+    display: flex;
+    height: 10px;
+    border-radius: 99px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.14);
+    width: min(100%, 340px);
+    margin: 0 auto;
+}
+.wrapped-bar span { height: 100%; display: block; }
+.wrapped-bar .wrapped-bar-ant { background: linear-gradient(to right, #4ade80, #34d399); }
+.wrapped-bar .wrapped-bar-amy { background: linear-gradient(to right, #a855f7, #9333ea); }
+.wrapped-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    width: min(100%, 340px);
+    margin: 6px auto 0;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* --- polaroids ------------------------------------------------------------ */
+
+.wrapped-polaroids {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    margin: 6px 0 2px;
+    min-height: 10px;
+}
+.wrapped-polaroid {
+    --rot: 0deg;
+    background: #fdfdfb;
+    padding: 7px 7px 4px;
+    border-radius: 3px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    flex: 0 0 auto;
+    opacity: 0;
+    animation: wrapped-drop 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.wrapped-polaroid + .wrapped-polaroid { margin-left: -12px; }
+.wrapped-polaroid img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    /* Shows through if the photo can't be fetched, so an offline slide is a
+       grey frame rather than a broken icon. */
+    background: #dcdce1;
+}
+.wrapped-polaroid .wrapped-cap {
+    font-size: 9px;
+    line-height: 1.3;
+    color: #4b5563;
+    padding: 5px 1px 3px;
+    text-align: center;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@keyframes wrapped-drop {
+    from { opacity: 0; transform: translateY(-26px) rotate(0deg) scale(0.94); }
+    to   { opacity: 1; transform: translateY(0) rotate(var(--rot)) scale(1); }
+}
+
+/* --- the little callouts under a month ------------------------------------ */
+
+.wrapped-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    max-width: 100%;
+}
+.wrapped-note em { font-style: normal; color: rgba(255, 255, 255, 0.6); font-weight: 500; }
+.wrapped-quote {
+    font-size: clamp(0.85rem, 3.6vw, 1rem);
+    font-style: italic;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.4;
+    max-width: 30ch;
+    margin: 0 auto;
+}
+.wrapped-quote-who { font-style: normal; font-size: 11px; opacity: 0.55; display: block; margin-top: 3px; }
+
+
+.wrapped-callouts {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+}
+
+/* --- reduced motion ------------------------------------------------------- */
+/* Two ways in: the media query, and a class the player adds when it has been
+   told to hold still. The player also switches auto-advance off, so the show
+   waits to be tapped rather than moving on by itself. Both routes are listed
+   because a caller can ask for reduced motion explicitly, and the stylesheet
+   has no other way of knowing. */
+@media (prefers-reduced-motion: reduce) {
+    .wrapped-slide { transition: none; }
+    .wrapped-rise { opacity: 1; animation: none; transform: none; }
+    .wrapped-seg > i { animation: none; }
+    .wrapped-polaroid { opacity: 1; animation: none; transform: rotate(var(--rot)); }
+}
+.wrapped-reduced .wrapped-slide { transition: none; }
+.wrapped-reduced .wrapped-rise { opacity: 1; animation: none; transform: none; }
+.wrapped-reduced .wrapped-seg > i { animation: none; }
+.wrapped-reduced .wrapped-polaroid { opacity: 1; animation: none; transform: rotate(var(--rot)); }
+
+/* --- the race ------------------------------------------------------------- */
+/* Series colours are the darker steps of the app's own green and purple: the
+   brighter ones the rest of the app uses sit outside the OKLCH lightness band
+   for a dark surface. This pair passes all six palette checks against #0b0f1a.
+   Identity is never carried by colour alone — both lines are labelled at their
+   end, and named again with a swatch under the chart. */
+.wrapped-race { width: 100%; height: auto; display: block; overflow: visible; }
+/* The gap is revealed left to right by widening the group's clip, so the fills
+   and the outline arrive together rather than the line racing ahead of them. */
+.wrapped-race-reveal {
+    clip-path: inset(0 100% 0 0);
+    animation: wrapped-draw 3s cubic-bezier(0.3, 0.6, 0.3, 1) forwards;
+}
+@keyframes wrapped-draw { to { clip-path: inset(0 0 0 0); } }
+.wrapped-race-edge {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.75);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.wrapped-race-pole { font-size: 9px; font-weight: 800; }
+
+/* Hairline, solid, one shade off the surface. */
+.wrapped-race-axis { stroke: rgba(255, 255, 255, 0.18); stroke-width: 1; }
+.wrapped-race-tick { stroke: rgba(255, 255, 255, 0.4); stroke-width: 1; }
+.wrapped-race-tick-dot { fill: rgba(255, 255, 255, 0.7); }
+.wrapped-race-axis-label { fill: rgba(255, 255, 255, 0.45); font-size: 8px; font-weight: 600; }
+.wrapped-key { display: flex; gap: 14px; justify-content: center; font-size: 12px; font-weight: 600; }
+.wrapped-key span { display: inline-flex; align-items: center; gap: 5px; }
+.wrapped-key i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+/* --- two-column blocks (best days, habits) -------------------------------- */
+
+.wrapped-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: start;
+}
+.wrapped-col-head { font-size: 12px; font-weight: 800; margin-bottom: 6px; }
+.wrapped-rank {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 0;
+    justify-content: center;
+}
+.wrapped-rank .wrapped-rank-steps { font-weight: 800; font-variant-numeric: tabular-nums; }
+.wrapped-rank .wrapped-rank-when { font-size: 10px; color: rgba(255, 255, 255, 0.55); }
+.wrapped-fact { font-size: 12px; line-height: 1.5; padding: 5px 0; }
+.wrapped-fact strong { display: block; font-size: 15px; font-weight: 800; }
+.wrapped-fact em { font-style: normal; color: rgba(255, 255, 255, 0.55); font-size: 10px; }
+
+.wrapped-reduced .wrapped-race-reveal { animation: none; clip-path: none; }
+@media (prefers-reduced-motion: reduce) {
+    .wrapped-race-reveal { animation: none; clip-path: none; }
+}
+
+/* --- places --------------------------------------------------------------- */
+/* Every Leaflet interaction is switched off and the container ignores pointer
+   events, so a tap on the map still advances the show rather than panning a map
+   nobody asked to pan. */
+.wrapped-map {
+    width: 100%;
+    height: min(44vh, 320px);
+    border-radius: 14px;
+    overflow: hidden;
+    background: #16202f;
+    pointer-events: none;
+}
+.wrapped-map .leaflet-container { background: #16202f; }
+.wrapped-pin {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    animation: wrapped-pop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+.wrapped-pin-ant { background: #16a34a; }
+.wrapped-pin-amy { background: #a855f7; }
+@keyframes wrapped-pop {
+    from { opacity: 0; transform: translateY(-14px) scale(0.5); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* --- passport stamps ------------------------------------------------------ */
+/* The main page's stamps are ink on paper; these are the same idea shrunk for a
+   dark slide, with their own class so the passport's nth-child tilts don't
+   reach in here. */
+.wrapped-stamps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+}
+.wrapped-stamp {
+    width: 74px;
+    height: 74px;
+    border-radius: 50%;
+    border: 2px double rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    font-size: 8px;
+    line-height: 1.15;
+    font-weight: 700;
+    text-align: center;
+    opacity: 0;
+    animation: wrapped-pop 0.4s cubic-bezier(0.2, 1.3, 0.4, 1) forwards;
+}
+.wrapped-stamp .wrapped-stamp-when { font-weight: 500; color: rgba(255, 255, 255, 0.55); font-size: 7px; }
+.wrapped-stamp-crown { font-size: 9px; display: flex; align-items: center; gap: 3px; }
+.wrapped-stamp-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+/* --- awards --------------------------------------------------------------- */
+
+.wrapped-award {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.09);
+    border-radius: 12px;
+    padding: 9px 11px;
+    margin-bottom: 7px;
+    opacity: 0;
+    animation: wrapped-pop 0.4s cubic-bezier(0.2, 1.3, 0.4, 1) forwards;
+}
+.wrapped-award-emoji { font-size: 20px; flex-shrink: 0; }
+.wrapped-award-label { display: block; font-size: 12px; font-weight: 800; line-height: 1.2; }
+.wrapped-award-detail { display: block; font-size: 10px; color: rgba(255, 255, 255, 0.6); line-height: 1.3; margin-top: 1px; }
+
+.wrapped-reduced .wrapped-pin,
+.wrapped-reduced .wrapped-stamp,
+.wrapped-reduced .wrapped-award { opacity: 1; animation: none; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+    .wrapped-pin, .wrapped-stamp, .wrapped-award { opacity: 1; animation: none; transform: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   The recap — this one lives on the main page, in daylight, so it uses the
+   app's light surfaces rather than the show's dark ones.
+   --------------------------------------------------------------------------- */
+
+.recap { display: block; }
+.recap-play {
+    display: block;
+    width: 100%;
+    border: 0;
+    cursor: pointer;
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(120deg, #0b0f1a 0%, #1b2440 55%, #3b1d5e 100%);
+    box-shadow: 0 6px 18px rgba(11, 15, 26, 0.24);
+}
+.recap-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+}
+.recap-tile {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 10px;
+    padding: 9px 10px;
+    text-align: center;
+}
+.recap-tile-value {
+    display: block;
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: #374151;
+}
+.recap-tile-label { display: block; font-size: 10px; color: #9ca3af; margin-top: 1px; }
+
+.recap-h {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin: 18px 0 7px;
+}
+.recap-line { font-size: 12px; color: #4b5563; line-height: 1.55; }
+.recap-dim { color: #9ca3af; }
+.recap-sub-name { font-size: 11px; font-weight: 800; margin-bottom: 3px; }
+.recap-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.recap-toggle {
+    width: 100%;
+    margin-top: 14px;
+    padding: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #6b7280;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 9px;
+    cursor: pointer;
+}
+.recap-toggle:hover { color: #374151; }
+.recap-foot { font-size: 10px; color: #9ca3af; text-align: center; margin-top: 8px; }
+
+/* --- the year as a grid --------------------------------------------------- */
+/* Twelve rows and thirty-one columns. GitHub's 53-column layout does not fit a
+   portrait phone; this does, and a month still reads as a row. */
+.recap-heat-block { margin-bottom: 10px; }
+.recap-heat-name { font-size: 10px; font-weight: 800; margin-bottom: 3px; }
+.recap-heat {
+    display: grid;
+    grid-template-columns: 26px repeat(31, 1fr);
+    gap: 2px;
+    align-items: center;
+}
+.recap-heat-label { font-size: 8px; font-weight: 700; color: #9ca3af; }
+.recap-heat-cell {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    background: #f1f2f4;
+    cursor: pointer;
+}
+/* A 31st column in a 30-day month has no day to stand for. */
+.recap-heat-cell.is-void { background: transparent; cursor: default; }
+.recap-heat-readout {
+    font-size: 10px;
+    color: #6b7280;
+    text-align: center;
+    min-height: 14px;
+    margin-top: 2px;
+}
+
+/* --- the race, in daylight ------------------------------------------------ */
+/* The series colours are the same validated pair as the show; only the neutral
+   chrome changes, because the surface did. */
+.recap-race { margin-top: 4px; }
+.recap-race .wrapped-race-edge { stroke: rgba(17, 24, 39, 0.55); }
+.recap-race .wrapped-race-axis { stroke: rgba(17, 24, 39, 0.22); }
+.recap-race .wrapped-race-tick { stroke: rgba(17, 24, 39, 0.3); }
+.recap-race .wrapped-race-tick-dot { fill: rgba(17, 24, 39, 0.55); }
+.recap-race .wrapped-race-axis-label { fill: #9ca3af; }
+/* No reveal here: the recap is a page you scroll to, not a slide that plays. */
+.recap-race .wrapped-race-reveal { animation: none; clip-path: none; }
+
+/* --- quotes --------------------------------------------------------------- */
+
+.wrapped-quotes { display: flex; flex-direction: column; gap: 12px; }
+.wrapped-pull {
+    opacity: 0;
+    animation: wrapped-rise 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.wrapped-pull-text {
+    font-size: clamp(0.9rem, 4vw, 1.15rem);
+    font-style: italic;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.92);
+}
+.wrapped-pull-who { font-size: 11px; font-weight: 700; margin-top: 3px; display: block; }
+
+/* --- the photo wall ------------------------------------------------------- */
+/* Small on purpose: it should read as a pile of the year rather than a gallery. */
+.wrapped-wall {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: center;
+    gap: 0;
+    /* The cards are tilted up to nine degrees, so the clip box needs room for
+       their corners — without this the outermost photos get shaved. */
+    padding: 14px;
+    max-height: 58vh;
+    overflow: hidden;
+}
+.wrapped-wall .wrapped-polaroid {
+    margin: -5px;
+    padding: 4px 4px 4px;
+    border-radius: 2px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+.wrapped-wall .wrapped-polaroid img { aspect-ratio: 1 / 1; }
+
+/* --- stretch goals -------------------------------------------------------- */
+
+.wrapped-goal {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.09);
+    border-radius: 12px;
+    padding: 11px 13px;
+    margin-bottom: 8px;
+}
+.wrapped-goal-reward { font-size: 24px; flex-shrink: 0; }
+.wrapped-goal-body { flex: 1; min-width: 0; }
+/* These are spans inside a span, so they need telling to be blocks — inline
+   elements ignore height, which quietly swallowed the progress bar. */
+.wrapped-goal-body { display: block; }
+.wrapped-goal-label { display: block; font-size: 13px; font-weight: 800; }
+.wrapped-goal-note { display: block; font-size: 11px; color: rgba(255, 255, 255, 0.62); margin-top: 1px; }
+.wrapped-goal-bar {
+    display: block;
+    height: 5px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.16);
+    margin-top: 5px;
+    overflow: hidden;
+}
+.wrapped-goal-bar span { display: block; height: 100%; border-radius: 99px; }
+
+.wrapped-reduced .wrapped-pull { opacity: 1; animation: none; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+    .wrapped-pull { opacity: 1; animation: none; transform: none; }
+}
