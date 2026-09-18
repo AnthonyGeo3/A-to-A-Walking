@@ -1776,8 +1776,13 @@ export function recapHtml(stats) {
         <p class="recap-foot">Figures are live — a walk logged late still lands in the year it belongs to.</p>`;
 }
 
-/** Render the recap into a host element and wire its three interactions. */
-export function mountRecap(host, stats, { onPlay } = {}) {
+/**
+ * Render the recap into a host element and wire its three interactions.
+ * `expanded` restores the open state, because this is re-rendered on every
+ * Firestore update and nobody wants the section they are reading to fold itself
+ * up because the other one logged a walk. `onExpand` reports changes back.
+ */
+export function mountRecap(host, stats, { onPlay, expanded = false, onExpand } = {}) {
     host.innerHTML = recapHtml(stats);
     host.classList.add('recap');
 
@@ -1787,10 +1792,15 @@ export function mountRecap(host, stats, { onPlay } = {}) {
     const more = host.querySelector('.recap-more');
     const toggle = host.querySelector('.recap-toggle');
     if (more && toggle) {
+        const apply = (open) => {
+            more.hidden = !open;
+            toggle.textContent = open ? 'Show less ▲' : 'Show more ▼';
+        };
+        apply(!!expanded);
         toggle.addEventListener('click', () => {
-            const open = !more.hidden;
-            more.hidden = open;
-            toggle.textContent = open ? 'Show more ▼' : 'Show less ▲';
+            const open = more.hidden;
+            apply(open);
+            if (typeof onExpand === 'function') onExpand(open);
         });
     }
 

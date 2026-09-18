@@ -2281,6 +2281,10 @@
 
         // The recap stays on the page for good once a year is done — it is where
         // you go back to it, long after the banner has been dismissed.
+        // It re-renders on every Firestore update, so remember whether it was open:
+        // the section you are reading should not fold itself up because the other
+        // one just logged a walk.
+        let wrappedRecapExpanded = false;
         function renderWrappedRecap() {
             const section = document.getElementById('wrapped-recap-section');
             const host = document.getElementById('wrapped-recap');
@@ -2290,7 +2294,11 @@
             section.classList.remove('hidden');
             document.getElementById('wrapped-recap-heading').textContent = `📖 ${yearWord(n)} Recap`;
             // Rebuilt from the live logs, so it can never drift from the show.
-            mountRecap(host, buildWrappedStats(n), { onPlay: playWrapped });
+            mountRecap(host, buildWrappedStats(n), {
+                onPlay: playWrapped,
+                expanded: wrappedRecapExpanded,
+                onExpand: (open) => { wrappedRecapExpanded = open; }
+            });
         }
 
         function renderWrappedBanner() {
