@@ -781,14 +781,45 @@ export function lastMilestoneAtOrBelow(steps, milestones) {
     return best;
 }
 
-// Which completed challenge years have a Wrapped to show. A year only qualifies
+/** The challenge year a date falls in. Year 1 is the one starting 1 Oct 2025. */
+export function challengeYearAt(now = new Date()) {
+    const startYear = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
+    return Math.max(1, startYear - CHALLENGE_START_YEAR + 1);
+}
+
+/** The last day of challenge year `n` — 30 September. */
+export function finalDayOf(n) {
+    const end = challengeYearEnd(n); // 1 October, exclusive
+    return new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
+}
+
+/**
+ * Has this person logged the very last day of the year now in progress?
+ *
+ * Adding steps here is a bedtime routine, so a year that technically ends at
+ * midnight would sit unopened for a whole extra day. Once the final day's steps
+ * are in, the year is finished as far as the person who logged them is
+ * concerned, and the show can start there and then.
+ *
+ * Both halves matter. The log has to be for the final day, and the clock has to
+ * have reached it — the app won't let anyone date an entry into the future, but
+ * this shouldn't depend on that to stay shut. Outside the final day it is always
+ * false: before, there is nothing to unlock; after, the ordinary gate has it.
+ */
+export function hasLoggedFinalDay(logs, uid, now = new Date()) {
+    if (!uid) return false;
+    const last = dayKey(finalDayOf(challengeYearAt(now)));
+    if (dayKey(now) !== last) return false;
+    return (logs || []).some((l) => l.userId === uid && l.date && dayKey(l.date) === last);
+}
+
+// Which challenge years have a Wrapped to show. A year normally only qualifies
 // once it is over, which is what keeps the surprise until 1 October.
-export function wrappedYears(now = new Date(), { preview = false } = {}) {
-    const currentYear = Math.max(1, (() => {
-        const startYear = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
-        return startYear - CHALLENGE_START_YEAR + 1;
-    })());
-    const lastComplete = preview ? currentYear : currentYear - 1;
+// `finalDayLogged` — from hasLoggedFinalDay above — brings that forward to the
+// last night of the year, and `preview` ignores the gate altogether.
+export function wrappedYears(now = new Date(), { preview = false, finalDayLogged = false } = {}) {
+    const currentYear = challengeYearAt(now);
+    const lastComplete = preview || finalDayLogged ? currentYear : currentYear - 1;
     const out = [];
     for (let n = 1; n <= lastComplete; n++) out.push(n);
     return out;

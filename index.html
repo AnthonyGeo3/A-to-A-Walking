@@ -494,6 +494,7 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
         import { computeWrapped, openWrapped, wrappedYears, yearWord, mountRecap,
+                 hasLoggedFinalDay,
                  CHALLENGE_START_YEAR, challengeYearStart, challengeYearEnd } from './wrapped.js';
 
         // --- ⚙️ CHALLENGE DATA ---
@@ -1937,6 +1938,13 @@
 
         // --- Interaction ---
         const modal = document.getElementById('modal-overlay');
+        // One log on the last night of the year can set off both a milestone and
+        // the Wrapped. The milestone goes first; this hands over on the way out.
+        const closeModal = () => {
+            modal.classList.add('hidden');
+            maybeAutoPlayWrapped();
+        };
+
         const showModal = (title, content, onConfirm, confirmText) => {
             document.getElementById('modal-title').innerText = title;
             document.getElementById('modal-content').innerHTML = content;
@@ -1947,8 +1955,8 @@
             confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
             newConfirm.textContent = confirmText || 'Save';
             cancelBtn.classList.toggle('hidden', !!confirmText);
-            newConfirm.addEventListener('click', () => { onConfirm(); modal.classList.add('hidden'); });
-            cancelBtn.onclick = () => modal.classList.add('hidden');
+            newConfirm.addEventListener('click', () => { onConfirm(); closeModal(); });
+            cancelBtn.onclick = closeModal;
         };
 
         // Stash the log id when the camera button is clicked, so the file-input
@@ -2153,6 +2161,12 @@
             const countsThisYear = getChallengeYear(selectedDate) === currentChallengeYear();
 
             stepInput.disabled = true;
+            // Hold the Wrapped until this log has been dealt with. The write
+            // lands, the snapshot comes back and the year can finish — all
+            // before the milestone modal has gone up — which would open the show
+            // underneath it. Nothing is lost by waiting: the hold is released a
+            // few lines down and the show is offered again there.
+            wrappedHold = true;
             try {
                 await runTransaction(db, async (t) => {
                     const uDoc = await t.get(currentUser === 'user1' ? user1DocRef : user2DocRef);
@@ -2206,7 +2220,14 @@
                 selectedDate = new Date();
                 updateDateDisplay();
             } catch (err) { console.error(err); }
-            finally { stepInput.disabled = false; }
+            finally {
+                stepInput.disabled = false;
+                wrappedHold = false;
+                // The last night of the year: if that log finished it, this is
+                // where the show starts. If a milestone modal is up, it waits
+                // again and closing the modal calls back here.
+                maybeAutoPlayWrapped();
+            }
         }
 
         // --- 🎁 Year Wrapped ---
@@ -2220,7 +2241,12 @@
         const wrappedFlag = new URLSearchParams(location.search).get('wrapped');
         const WRAPPED_PREVIEW = wrappedFlag === 'preview' || wrappedFlag === '1';
         const WRAPPED_FORCE_OPEN = wrappedFlag === '1';
-        let wrappedAutoChecked = false;
+        // Which profile the show has already opened itself for this page load —
+        // '' before anyone picks a name, null for nobody yet.
+        let wrappedAutoPlayedFor = null;
+        // Set while a log is being written, so the show can't open in the gap
+        // between the data landing and the app finishing with that log.
+        let wrappedHold = false;
 
         // Photos hand-picked for particular slides, named by the day they were
         // taken. Automatic picking can only go on step counts and distance, which
@@ -2238,14 +2264,25 @@
             from: 'love Ant'
         };
 
-        const wrappedSeenKey = (n) => `a2a-wrapped-seen-y${n}`;
+        // Seen is remembered per person as well as per device, because on the last
+        // night you might both log on the same phone: the second one to finish
+        // the year should still get their own show rather than someone else's
+        // already-watched flag.
+        //
+        // The bare key is what gets written before a profile has been picked,
+        // which is how 1 October opens — nobody has tapped their name yet. Either
+        // key counts as seen, so that first play still settles it for both of you.
+        const wrappedSeenKey = (n, uid) => `a2a-wrapped-seen-y${n}${uid ? `-${uid}` : ''}`;
         // localStorage throws in private mode. Failing to read just means it offers
         // again, which is a far better failure than the show never appearing.
         function wrappedSeen(n) {
-            try { return localStorage.getItem(wrappedSeenKey(n)) === '1'; } catch (e) { return false; }
+            try {
+                return localStorage.getItem(wrappedSeenKey(n)) === '1'
+                    || (!!currentUser && localStorage.getItem(wrappedSeenKey(n, currentUser)) === '1');
+            } catch (e) { return false; }
         }
         function markWrappedSeen(n) {
-            try { localStorage.setItem(wrappedSeenKey(n), '1'); } catch (e) { /* nothing to do */ }
+            try { localStorage.setItem(wrappedSeenKey(n, currentUser), '1'); } catch (e) { /* nothing to do */ }
         }
 
         // Whether the music is off, remembered per device like the seen flag.
@@ -2289,8 +2326,21 @@
         let wrappedRecapUnlocked = false;
 
         // The most recent year with a Wrapped, or null before the first one ends.
+        // Every gate question goes through here, so the banner, the recap and the
+        // auto-play can't end up disagreeing about whether the year is open.
+        // On 30 September it opens the moment you log that last day — see
+        // hasLoggedFinalDay.
+        function openWrappedYears({ preview = WRAPPED_PREVIEW } = {}) {
+            return wrappedYears(new Date(), {
+                preview,
+                // wrappedLogs(), not logData: Firestore hands back Timestamps, and
+                // this is the one place that turns them into dates.
+                finalDayLogged: hasLoggedFinalDay(wrappedLogs(), currentUser)
+            });
+        }
+
         function latestWrappedYear({ preview = WRAPPED_PREVIEW } = {}) {
-            const years = wrappedYears(new Date(), { preview });
+            const years = openWrappedYears({ preview });
             return years.length ? years[years.length - 1] : null;
         }
 
@@ -2391,8 +2441,8 @@
                     if (!logData.length) return;
                     // After the gate this should still show the finished year, not
                     // the one currently in progress.
-                    const done = wrappedYears(new Date());
-                    const early = wrappedYears(new Date(), { preview: true });
+                    const done = openWrappedYears({ preview: false });
+                    const early = openWrappedYears({ preview: true });
                     const n = done.length ? done[done.length - 1] : early[early.length - 1];
                     if (n != null) playWrapped(n, { record: false });
                 }, 900);
@@ -2404,13 +2454,25 @@
         // the cover slide, which waits for a tap, so nothing runs before she's
         // actually looking at it.
         function maybeAutoPlayWrapped() {
-            if (wrappedAutoChecked) return;
+            // Latched per person rather than per page load: on a shared phone the
+            // second one to log has finished their own year, and that is a fresh
+            // reason to open, not a repeat of the first.
+            if (wrappedHold) return;
+            const who = currentUser || '';
+            if (wrappedAutoPlayedFor === who) return;
             // Wait for real data: opening against an empty snapshot would show a
             // year in which nobody walked anywhere.
             if (!logData.length) return;
-            wrappedAutoChecked = true;
             const n = latestWrappedYear();
+            // Nothing to open yet — but don't latch, because the year can finish
+            // while the app is sitting open. That is the whole point on the last
+            // night: the log that completes the year arrives as an ordinary
+            // update, and this runs again on the back of it.
             if (n == null) return;
+            // A milestone on the same log puts a modal up first. Let it have the
+            // screen; closing it calls back here.
+            if (!modal.classList.contains('hidden')) return;
+            wrappedAutoPlayedFor = who;
             if (WRAPPED_FORCE_OPEN || (!WRAPPED_PREVIEW && !wrappedSeen(n))) playWrapped(n);
         }
 

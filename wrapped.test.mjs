@@ -17,6 +17,9 @@ import {
     monthSlide,
     yearWord,
     wrappedYears,
+    hasLoggedFinalDay,
+    finalDayOf,
+    challengeYearAt,
     haversineKm,
     lastMilestoneAtOrBelow,
     recapHtml,
@@ -1022,3 +1025,47 @@ test('a person with nothing logged has no best month to show', () => {
 
 // Same rounding and grouping the recap itself uses.
 function fmtN(n) { return Math.round(n || 0).toLocaleString('en-GB'); }
+
+// --- the last night of the year --------------------------------------------
+
+test('the final day of a year is 30 September', () => {
+    assert.deepEqual(finalDayOf(1), D(2026, 9, 30));
+    assert.deepEqual(finalDayOf(2), D(2027, 9, 30));
+    // The day after is the first of the next year, not the last of this one.
+    assert.equal(challengeYearAt(D(2026, 9, 30)), 1);
+    assert.equal(challengeYearAt(D(2026, 10, 1)), 2);
+});
+
+test('logging the final day opens the year that evening', () => {
+    const logs = [
+        { id: 'a', userId: 'user1', steps: 9000, date: D(2026, 9, 30, 21, 40) },
+        { id: 'b', userId: 'user2', steps: 8000, date: D(2026, 9, 29, 22, 0) }
+    ];
+    const night = D(2026, 9, 30, 21, 41);
+    assert.equal(hasLoggedFinalDay(logs, 'user1', night), true);
+    assert.equal(hasLoggedFinalDay(logs, 'user2', night), false, 'the 29th is not the 30th');
+    // It is per person: one of you finishing does not open it for the other.
+    assert.deepEqual(wrappedYears(night, { finalDayLogged: true }), [1]);
+    assert.deepEqual(wrappedYears(night, { finalDayLogged: false }), []);
+});
+
+test('the final-day unlock is shut outside the final day', () => {
+    const logs = [{ id: 'a', userId: 'user1', steps: 9000, date: D(2026, 9, 30, 21, 40) }];
+    // The evening before: the log cannot exist yet, but even handed one it stays shut.
+    assert.equal(hasLoggedFinalDay(logs, 'user1', D(2026, 9, 29, 23, 0)), false);
+    // Earlier on the final day, before the steps go in.
+    assert.equal(hasLoggedFinalDay([], 'user1', D(2026, 9, 30, 9, 0)), false);
+    // Afterwards the ordinary gate has it, and this stops answering.
+    assert.equal(hasLoggedFinalDay(logs, 'user1', D(2026, 10, 1, 0, 1)), false);
+    assert.deepEqual(wrappedYears(D(2026, 10, 1, 0, 1)), [1], 'the ordinary gate takes over');
+    // No profile picked yet.
+    assert.equal(hasLoggedFinalDay(logs, null, D(2026, 9, 30, 22, 0)), false);
+});
+
+test('a year finished early does not drag the next one open with it', () => {
+    // A year later, on the last night of year 2.
+    const logs = [{ id: 'a', userId: 'user1', steps: 9000, date: D(2027, 9, 30, 21, 0) }];
+    const night = D(2027, 9, 30, 21, 1);
+    assert.equal(hasLoggedFinalDay(logs, 'user1', night), true);
+    assert.deepEqual(wrappedYears(night, { finalDayLogged: true }), [1, 2]);
+});
