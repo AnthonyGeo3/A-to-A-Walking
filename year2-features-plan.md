@@ -199,17 +199,23 @@ change**. Only the backdrop does.
 - **Once a day**, on the first open, a few motif pieces (6–10) drift down
   across the header only, over about four seconds, then stop. Not on every
   open, and never with `prefers-reduced-motion`.
-- **Optional moments** as variants of the season: Christmas (1–26 Dec: a
-  little warmer, with a sprig of holly) and your anniversary, if you give me
-  the date. Keep the list short, or it starts to feel like a supermarket.
+- **Moments** as variants of the season:
+  - **Your anniversary, 26 October**: a little heart tucked in with the
+    autumn leaves, for that day only.
+  - **Christmas** (1–26 Dec): a little warmer, with a sprig of holly.
+
+  They live in one `MOMENTS` list (`{ id, month, day, until? }`), so more
+  dates can be added later with one line each. Only these two for now. Keep
+  the list short, or it starts to feel like a supermarket.
 - **No sound.**
 
 ### Code
 
 - New `season.js` exporting `seasonFor(date)`, which returns `'autumn'`,
   `'winter'`, `'spring'` or `'summer'`, plus `momentFor(date)`, which returns
-  `null`, `'christmas'` or `'anniversary'`. Include tests on the boundary days
-  (30 Nov / 1 Dec, 28 Feb / 1 Mar, leap years).
+  `null`, `'christmas'` or `'anniversary'`, read from the `MOMENTS` list.
+  Include tests on the boundary days (30 Nov / 1 Dec, 28 Feb / 1 Mar, leap
+  years, 25 / 26 / 27 Oct).
 - Set it as early as possible, in a tiny inline script in `<head>`, so the
   page never flashes the wrong season:
   `document.documentElement.dataset.season = ...`
@@ -267,25 +273,43 @@ been at least one trip.
 
 Automatic, from logs that have a location (`lat`/`lng`):
 
-1. A day is an **away day** if either of you has a located log that day more
-   than `TRIP_KM` (40 km, already in `wrapped.js`) from `HOME`.
-2. Consecutive away days join into one trip. **A single unlocated day between
-   away days is bridged** (travel days often have no location logged), unless
-   that day has a located log *near home*, which proves you were back.
-3. Keep a trip if it has **2+ days**, or it is **1 day more than 150 km** away
+**Trips are only trips you took together.** A work trip to London on your
+own must never become a card.
+
+1. A day is a **together-away day** if *both* of you have a located log that
+   day more than `TRIP_KM` (40 km, already in `wrapped.js`) from `HOME`, and
+   those locations are **within 50 km of each other** (`TOGETHER_KM`). Use
+   each person's furthest located log that day.
+2. A day where one of you is located away and **the other is located near
+   home** is a solo day. It is never part of a trip, and it breaks a trip in
+   two.
+3. A day where one of you is located away and the other simply **added no
+   location** counts only when it sits next to a together-away day (the same
+   trip, where one of you forgot to tag it). It can extend a trip but never
+   start one. A trip needs at least one together-away day.
+4. Consecutive days join into one trip. **A single day with no location from
+   either of you is bridged** (travel days often have none), unless that day
+   has a located log *near home*, which proves you were back.
+5. Keep a trip if it has **2+ days**, or it is **1 day more than 100 km** away
    (a far day trip counts; a day out in Liverpool doesn't).
-4. **Title**: the most common town among the trip's located logs. The town is
+6. **Title**: the most common town among the trip's located logs. The town is
    taken from `locationName`: the second-to-last comma part when there are 3+
    parts ("The Bellagio, **Las Vegas**, United States"), otherwise the first
    part. Ties go to the furthest place. A rename overrides it.
-5. **Cover photo**: the photo from the trip's biggest day, the same rule as
+7. **Cover photo**: the photo from the trip's biggest day, the same rule as
    Wrapped's furthest-photo pick.
 
 **The thresholds are guesses, and must be checked against the real logs
 before building the UI.** Step one of this feature is to run `findTrips` on
 the real data and list what it finds, then have Ant confirm the list looks
-like your actual trips (Vegas, Tenerife, Edinburgh, and whatever else). Tune
-the two numbers until it does.
+like your actual trips (Vegas, Tenerife, Edinburgh, and whatever else), with
+no solo trips in it. Tune the numbers until it does.
+
+The together rule depends on both of you adding locations while away. If the
+real data shows one of you usually tags and the other doesn't, rule 3 is
+what saves those trips. If it still misses real ones, the fallback is to
+loosen rule 3 (an untagged partner counts whenever the other is away for
+2+ days), not to drop the together rule.
 
 ### Data
 
@@ -300,14 +324,21 @@ the two numbers until it does.
 
 ### Code
 
-- New `trips.js`, pure: `findTrips(logs, { home, tripKm, minFarKm })` returns
+- New `trips.js`, pure: `findTrips(logs, { home, tripKm, togetherKm, minFarKm })` returns
   a list of `{ start, end, days, title, placeNames, countries, maxKm,
   steps: { user1, user2 }, photos, notes, points, coverPhoto }`. It reuses
   `haversineKm`, `HOME` and `TRIP_KM` from `wrapped.js`.
 - **`trips.test.mjs`**:
   - Bridging a one-day gap.
   - *Not* bridging when the gap day is at home.
-  - A single 45 km day is dropped; a single 400 km day is kept.
+  - A single 45 km day is dropped; a single 120 km day is kept; a single 90 km
+    day is dropped.
+  - **Solo days**: Ant in London for three days with Amy logged at home
+    produces no trip. The same with Amy logging no location at all also
+    produces no trip.
+  - Both of you away but 300 km apart on the same day is not a together day.
+  - One of you forgetting to tag the middle day of a together trip keeps it
+    as one trip.
   - Two trips a week apart stay separate.
   - The title rule on real-looking `locationName` strings.
   - Steps count every log on the trip's days, located or not.
@@ -472,6 +503,22 @@ The coordinates are the slow part, and the self-check makes them reliable.
 
 ---
 
+## Known issue: racing last year before tonight's steps are in
+
+The ghost marker on each bar and the "↑ x% vs year 1" pill in Stats compare
+this year so far against last year *up to and including today*. But today's
+steps don't go in until bedtime, so all day you're measured against one more
+day of last year than of this year.
+- On **1 October** that means "↓ 100% vs year 1" until you log.
+- The ghost sits past the end of an empty bar.
+- It settles as the year goes on, but it's wrong every morning.
+
+**Fix:** per person, if they haven't logged today yet, cut last year off at
+the same *yesterday* (the app already has `hasLoggedToday` for the daily
+average, for exactly this reason). Also hide the pill for the first 7 days,
+when a single day swings the percentage wildly. Small, and it goes in first,
+unless it's shipped before 1 October.
+
 ## Build order
 
 1. **Test harness into the repo** (`tests/`), from section 0. Small, and every
@@ -487,12 +534,12 @@ The coordinates are the slow part, and the self-check makes them reliable.
 Each step is its own PR, gets its own `sw.js` bump, and is merged once its
 node tests, its driver and the 390px screenshots are good.
 
-## Open questions (with the default used if unanswered)
+## Decisions
 
-- **Activity list.** Anything to add besides running, badminton, cycling,
-  pilates, dancing and other, e.g. swimming or the gym? *Default: the six
-  above; add more to `ACTIVITIES` any time.*
-- **Anniversary date** for the seasonal moment? *Default: skip it.*
-- **Trip rules.** Are 2+ days, or a single day more than 150 km, right?
-  *Default: yes, confirmed against the real trip list before building the UI.*
-- **World view default.** All time or This year? *Default: All time.*
+- **Activities:** the six above for now. Add more to `ACTIVITIES` any time.
+- **Anniversary:** 26 October, alongside Christmas. More dates may come later;
+  only these two for now.
+- **Trips:** 2+ days away, or a single day more than 100 km, and **only when
+  you were both there** (section C). Still to be checked against the real
+  trip list before the UI is built.
+- **World view:** opens on All time.
