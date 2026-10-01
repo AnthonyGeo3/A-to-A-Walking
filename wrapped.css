@@ -640,6 +640,18 @@ body.wrapped-lock { overflow: hidden; }
     background: #f1f2f4;
     cursor: pointer;
 }
+/* A day with exercise ticked: a small white dot, ringed so it still shows on
+   an empty cell. White rather than the person's colour, which would vanish
+   into their own shading on a big day. */
+.recap-heat-cell { position: relative; }
+.recap-heat-cell.has-moved::after {
+    content: '';
+    position: absolute;
+    inset: 28%;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
 /* A 31st column in a 30-day month has no day to stand for. */
 .recap-heat-cell.is-void { background: transparent; cursor: default; }
 .recap-heat-readout {

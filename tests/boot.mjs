@@ -7,7 +7,8 @@
 // like the phone). Without it, Tailwind is reduced to `.hidden` and Leaflet to a
 // do-nothing fake — fine for behaviour, not for judging layout.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,6 +17,19 @@ const DEPS = join(HERE, '.deps');
 export const BASE = process.env.A2A_BASE || 'http://127.0.0.1:8899';
 
 const stub = readFileSync(join(HERE, 'fb-live.mjs'), 'utf8');
+
+// The Tailwind build only holds classes it found when it was made, so rebuild it
+// whenever any app file is newer — otherwise a new class silently does nothing.
+(function freshTailwind() {
+  const bin = join(DEPS, 'node_modules/.bin/tailwindcss');
+  const css = join(DEPS, 'tailwind.css');
+  if (!existsSync(bin)) return;
+  const root = join(HERE, '..');
+  const sources = readdirSync(root).filter((f) => /\.(html|js)$/.test(f)).map((f) => join(root, f));
+  const newest = Math.max(...sources.map((f) => statSync(f).mtimeMs));
+  if (existsSync(css) && statSync(css).mtimeMs >= newest) return;
+  execSync(`"${bin}" -i in.css -o tailwind.css --content '../../index.html,../../*.js'`, { cwd: DEPS, stdio: 'ignore' });
+})();
 const read = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : null);
 const tailwindCss = read(join(DEPS, 'tailwind.css'));
 const leafletJs = read(join(DEPS, 'node_modules/leaflet/dist/leaflet.js'));
@@ -106,12 +120,28 @@ export async function boot(browser, { time = new Date(2026, 9, 2, 12, 0), fixtur
   return { page, errors, context };
 }
 
+/** Close a milestone modal if one went up; returns its title, or null. */
+export async function dismissMilestone(page) {
+  const open = await page.evaluate(() => {
+    const m = document.getElementById('modal-overlay');
+    return m && !m.classList.contains('hidden') ? document.getElementById('modal-title').textContent : null;
+  });
+  if (open && /Milestone/.test(open)) { await page.click('#modal-confirm'); await page.waitForTimeout(150); }
+  return open;
+}
+
+/** Press Add, then clear any milestone celebration out of the way. */
+export async function submitLog(page) {
+  await page.click('#step-form button[type="submit"]');
+  await page.waitForTimeout(300);
+  return dismissMilestone(page);
+}
+
 /** Pick a profile, type steps, press Add. */
 export async function logSteps(page, who, steps) {
   await page.click(`#user-selector button:has-text("${who}")`);
   await page.fill('#step-input', String(steps));
-  await page.click('#step-form button[type="submit"]');
-  await page.waitForTimeout(300);
+  return submitLog(page);
 }
 
 /** Every day from..to (inclusive) for both of you, with deterministic steps. */
