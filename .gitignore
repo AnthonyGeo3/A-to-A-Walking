@@ -1,3 +1,6 @@
 # Local scratchpad — discarded experiments, source assets, scratch files.
 # Not part of the deployed app.
 trash/
+# Browser-test dependencies (see tests/setup.sh)
+tests/.deps/
+tests/.out/
