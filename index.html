@@ -10,6 +10,38 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192x192.png">
     <title>A to A Walking Challenge</title>
+    <!-- Seasons. Runs before anything paints, so the page never flashes the
+         wrong season. This is the only definition: seasons.test.mjs runs this
+         exact script for every day of a year. Preview with ?season=winter or
+         ?moment=christmas. -->
+    <script id="season-script">
+        (function () {
+            // Special days, as variants of the season. One line each to add more.
+            var MOMENTS = [
+                { id: 'anniversary', month: 10, day: 26 },
+                { id: 'christmas', month: 12, day: 1, until: 26 }
+            ];
+            // UK meteorological seasons.
+            function seasonFor(d) {
+                var m = d.getMonth() + 1;
+                return m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'autumn' : 'winter';
+            }
+            function momentFor(d) {
+                var m = d.getMonth() + 1, day = d.getDate();
+                for (var i = 0; i < MOMENTS.length; i++) {
+                    var x = MOMENTS[i];
+                    if (x.month === m && day >= x.day && day <= (x.until || x.day)) return x.id;
+                }
+                return null;
+            }
+            window.A2A_SEASON = { MOMENTS: MOMENTS, seasonFor: seasonFor, momentFor: momentFor };
+            var q = new URLSearchParams(location.search), now = new Date();
+            var root = document.documentElement;
+            root.dataset.season = q.get('season') || seasonFor(now);
+            var moment = q.has('moment') ? q.get('moment') : momentFor(now);
+            if (moment) root.dataset.moment = moment;
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="wrapped.css">
@@ -17,7 +49,70 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #f0fdf4 0%, #faf5ff 50%, #f0f9ff 100%); min-height: 100vh; }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, var(--page-a) 0%, var(--page-b) 50%, var(--page-c) 100%); min-height: 100vh; }
+
+        /* --- Seasons ---
+           Only the backdrop changes. Ant green, Amy purple, the bars, the numbers
+           and every chart stay exactly as they are. */
+        :root {
+            --page-a: #f0fdf4; --page-b: #faf5ff; --page-c: #f0f9ff;
+            --head-a: #ecfdf5; --head-b: #faf5ff; --head-c: #ecfdf5;
+            --motif-left: ''; --motif-right: '';
+        }
+        :root[data-season="autumn"] {
+            --page-a: #fffbeb; --page-b: #faf5ff; --page-c: #fff7ed;
+            --head-a: #fff7ed; --head-b: #fef3c7; --head-c: #ecfdf5;
+            --motif-left: '🍂'; --motif-right: '🍁';
+        }
+        :root[data-season="winter"] {
+            --page-a: #f0f9ff; --page-b: #f5f3ff; --page-c: #f8fafc;
+            --head-a: #eff6ff; --head-b: #f5f3ff; --head-c: #f0f9ff;
+            --motif-left: '❄️'; --motif-right: '❄️';
+        }
+        :root[data-season="spring"] {
+            --page-a: #f0fdf4; --page-b: #fdf2f8; --page-c: #f0fdf4;
+            --head-a: #f0fdf4; --head-b: #fdf2f8; --head-c: #ecfdf5;
+            --motif-left: '🌸'; --motif-right: '🌱';
+        }
+        :root[data-season="summer"] {
+            --page-a: #fefce8; --page-b: #f0f9ff; --page-c: #fff7ed;
+            --head-a: #fefce8; --head-b: #f0f9ff; --head-c: #fffbeb;
+            --motif-left: '🌼'; --motif-right: '☀️';
+        }
+        :root[data-moment="christmas"] {
+            --head-a: #fef2f2; --head-b: #f0fdf4; --head-c: #fef2f2;
+            --motif-left: '🎄'; --motif-right: '✨';
+        }
+        :root[data-moment="anniversary"] {
+            --head-a: #fff1f2; --head-b: #fef3c7; --head-c: #fff1f2;
+            --motif-left: '🍂'; --motif-right: '❤️';
+        }
+        .app-header {
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, var(--head-a) 0%, var(--head-b) 50%, var(--head-c) 100%);
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+        }
+        /* A couple of pieces tucked into the corners, not a pattern. Never in the
+           way of a tap: the long press on the subtitle has to keep working. */
+        .app-header::before, .app-header::after {
+            position: absolute; pointer-events: none; opacity: 0.6; font-size: 22px; line-height: 1;
+        }
+        .app-header::before { content: var(--motif-left); left: 14px; top: 12px; transform: rotate(-18deg); }
+        .app-header::after { content: var(--motif-right); right: 16px; bottom: 10px; transform: rotate(14deg); }
+        .app-header > * { position: relative; z-index: 1; }
+        /* Once a day, a few pieces drift down across the header and are gone. */
+        .season-drift {
+            position: absolute; top: -28px; pointer-events: none; z-index: 0;
+            font-size: 16px; line-height: 1; opacity: 0.75;
+            animation: season-fall var(--fall, 4s) ease-in forwards;
+        }
+        @keyframes season-fall {
+            0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+            12% { opacity: 0.8; }
+            100% { transform: translate(var(--sway, 20px), 150px) rotate(var(--spin, 180deg)); opacity: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) { .season-drift { display: none; } }
         
         /* Horizontal Bar Styles */
         .progress-bar-track {
@@ -356,7 +451,7 @@
 
     <div class="w-full max-w-3xl mx-auto main-container rounded-2xl overflow-hidden">
 
-        <div class="text-center py-5 px-4 sm:px-6" style="background: linear-gradient(135deg, #ecfdf5 0%, #faf5ff 50%, #ecfdf5 100%); border-bottom: 1px solid rgba(0,0,0,0.04);">
+        <div id="app-header" class="app-header text-center py-5 px-4 sm:px-6">
             <h1 class="text-3xl font-bold text-gray-800">A to A Walking!</h1>
             <p id="header-subtitle" class="text-gray-400 text-sm">Est. Oct 25</p>
         </div>
@@ -2655,6 +2750,42 @@
             renderWrappedRecap();
             maybeAutoPlayWrapped();
         }
+
+        // --- 🍂 Seasons ---
+        // The colours and corner pieces are all CSS, set by the <head> script.
+        // This is just the once-a-day flourish: a few pieces drift down across the
+        // header on the first open of the day, then they're gone.
+        const DRIFT = {
+            autumn: ['🍂', '🍁', '🍂'], winter: ['❄️'], spring: ['🌸', '🌸', '🌱'], summer: ['🌼', '✨'],
+            christmas: ['❄️', '✨'], anniversary: ['🍂', '❤️', '🍂']
+        };
+        function seasonDrift() {
+            const header = document.getElementById('app-header');
+            if (!header) return;
+            if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            const now = new Date();
+            const today = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+            try {
+                if (localStorage.getItem('a2a-season-drift') === today) return;
+                localStorage.setItem('a2a-season-drift', today);
+            } catch (e) { return; } // no storage: skip it rather than drift on every open
+            const root = document.documentElement;
+            const pieces = DRIFT[root.dataset.moment] || DRIFT[root.dataset.season];
+            if (!pieces) return;
+            for (let i = 0; i < 8; i++) {
+                const el = document.createElement('span');
+                el.className = 'season-drift';
+                el.textContent = pieces[i % pieces.length];
+                el.style.left = `${6 + Math.random() * 88}%`;
+                el.style.animationDelay = `${Math.random() * 1.6}s`;
+                el.style.setProperty('--fall', `${3 + Math.random() * 1.5}s`);
+                el.style.setProperty('--sway', `${Math.round(Math.random() * 60 - 30)}px`);
+                el.style.setProperty('--spin', `${Math.round(Math.random() * 360 - 180)}deg`);
+                header.appendChild(el);
+                setTimeout(() => el.remove(), 7000);
+            }
+        }
+        seasonDrift();
 
         // --- Setup ---
         function initializeMap() {

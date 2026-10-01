@@ -1,4 +1,4 @@
-const CACHE_NAME = 'a2a-walking-v20';
+const CACHE_NAME = 'a2a-walking-v21';
 const CORE_ASSETS = [
   '/A-to-A-Walking/',
   '/A-to-A-Walking/index.html',
