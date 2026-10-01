@@ -73,7 +73,7 @@ export async function launch() {
  *   path       page to open (default 'index.html'; add a query string freely)
  *   viewport   default 390×844, the phone the app is used on
  *   init       extra init scripts (strings)
- *   geocode    answer for nominatim lookups: [{ display_name, lat, lon }]
+ *   geocode    answer for nominatim lookups, or a function (url) => answer
  *   storage    localStorage entries to set before the page loads
  *   wrappedSeen  default true: Year One Wrapped counts as already watched
  */
@@ -112,7 +112,12 @@ export async function boot(browser, { time = new Date(2026, 9, 2, 12, 0), fixtur
   await page.route('**/canvas-confetti*/**', (r) => r.fulfill({ contentType: 'text/javascript', body: '' }));
   await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
   await page.route(/tile\.openstreetmap|basemaps\.cartocdn|arcgisonline/, (r) => r.fulfill({ contentType: 'image/png', body: TILE }));
-  await page.route('https://nominatim.openstreetmap.org/**', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(geocode) }));
+  // A geocode function that throws stands for being offline: the request fails.
+  await page.route('https://nominatim.openstreetmap.org/**', (r) => {
+    let body;
+    try { body = typeof geocode === 'function' ? geocode(r.request().url()) : geocode; } catch (e) { return r.abort(); }
+    return r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  });
 
   await page.goto(`${BASE}/${path}`);
   // Let the stubbed snapshots land and the first render settle.

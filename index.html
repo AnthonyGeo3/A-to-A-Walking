@@ -358,6 +358,36 @@
         .active-days-name { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
         .active-days-big { font-size: 22px; font-weight: 900; line-height: 1.1; font-variant-numeric: tabular-nums; }
 
+        /* --- Trips --- */
+        .trips-row {
+            display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory;
+            padding: 4px 2px 10px; -webkit-overflow-scrolling: touch;
+        }
+        .trip-card {
+            flex: 0 0 200px; scroll-snap-align: start; text-align: left;
+            background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 14px;
+            overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .trip-card-cover {
+            width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block;
+            background: linear-gradient(135deg, #ecfdf5, #faf5ff);
+        }
+        .trip-card-cover.is-empty { display: flex; align-items: center; justify-content: center; font-size: 34px; }
+        .trip-page {
+            position: fixed; inset: 0; z-index: 40; background: #fff;
+            overflow-y: auto; -webkit-overflow-scrolling: touch;
+        }
+        body.trip-lock { overflow: hidden; }
+        .trip-wall { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .trip-polaroid {
+            background: #fdfdfb; padding: 5px 5px 3px; border-radius: 3px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: rotate(var(--rot, 0deg));
+        }
+        .trip-polaroid img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; background: #e5e7eb; cursor: pointer; }
+        .trip-polaroid p { font-size: 9px; color: #4b5563; text-align: center; padding-top: 3px; font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #trip-map { height: 220px; border-radius: 12px; }
+
         .section-tinted {
             background: linear-gradient(180deg, #fafafa 0%, rgba(255,255,255,0) 100%);
             border-top: 1px solid rgba(0,0,0,0.04);
@@ -546,6 +576,12 @@
             </div>
         </div>
 
+        <!-- Trips — every trip away together, found from the logs. Hidden until there is one. -->
+        <div id="trips-section" class="hidden section-plain mb-8">
+            <h2 class="text-xl font-bold text-center text-gray-700 mb-3">✈️ Trips</h2>
+            <div id="trips-row" class="trips-row"></div>
+        </div>
+
         <!-- Logs & Map -->
         <div class="section-tinted rounded-xl p-4">
             <h2 class="text-xl font-bold text-center mb-4">Log & Map</h2>
@@ -600,6 +636,9 @@
         </div>
     </div>
 
+    <!-- A trip's own page. Under the lightbox and modals, so photos and renaming open on top. -->
+    <div id="trip-page" class="hidden trip-page" role="dialog" aria-modal="true" aria-label="Trip"></div>
+
     <!-- Lightbox for viewing full-size photos -->
     <div id="lightbox-overlay" class="hidden fixed inset-0 bg-black bg-opacity-90 z-50 flex flex-col items-center justify-center p-4">
         <img id="lightbox-img" alt="Log photo" class="max-w-full max-h-[80vh] rounded shadow-xl" />
@@ -628,6 +667,7 @@
         import { computeWrapped, openWrapped, wrappedYears, yearWord, mountRecap,
                  hasLoggedFinalDay,
                  CHALLENGE_START_YEAR, challengeYearStart, challengeYearEnd } from './wrapped.js';
+        import { findTrips, dayStates, storedName, tripDates, flagEmoji } from './trips.js';
         import { ACTIVITIES, activityFor, logActivities, describe as describeActivities, activityDays,
                  activitySummary, anyExercise, exerciseFromPicker } from './activity.js';
 
@@ -880,6 +920,8 @@
         const publicDataCollection = collection(db, 'artifacts', appId, 'public', 'data', 'challengeData');
         const user1DocRef = doc(publicDataCollection, 'user1');
         const user2DocRef = doc(publicDataCollection, 'user2');
+        // Names you've given trips, shared between both phones.
+        const tripsDocRef = doc(publicDataCollection, 'trips');
         const logsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'challengeLogs');
 
         // --- 📅 CHALLENGE YEAR ENGINE ---
@@ -1685,6 +1727,225 @@
             `;
         }
 
+        // --- ✈️ Trips ---
+        // Found from the logs every render (trips.js), named in this order: the
+        // name you gave it, else the town at its centre (looked up once and kept
+        // on the phone), else the most common place you tagged.
+        let tripNames = {};
+        let tripsCache = { logs: null, trips: [] };
+        function currentTrips() {
+            if (tripsCache.logs !== logData) tripsCache = { logs: logData, trips: findTrips(logData) };
+            return tripsCache.trips;
+        }
+
+        const TRIP_PLACES_KEY = 'a2a-trip-places';
+        const placeKey = (c) => `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`;
+        function tripPlaces() {
+            try { return JSON.parse(localStorage.getItem(TRIP_PLACES_KEY) || '{}'); } catch (e) { return {}; }
+        }
+        let placeQueue = Promise.resolve();
+        const placePending = new Set();
+        // The geocoder asks for no more than one request a second, and every
+        // answer is kept for good, so this only ever runs once per trip.
+        function lookUpPlace(centre) {
+            const k = placeKey(centre);
+            if (placePending.has(k) || tripPlaces()[k]) return;
+            placePending.add(k);
+            placeQueue = placeQueue.then(async () => {
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${centre.lat}&lon=${centre.lng}&zoom=10&format=json`);
+                    const data = await res.json();
+                    const a = (data && data.address) || {};
+                    const town = a.city || a.town || a.village || a.county || a.state || '';
+                    if (town) {
+                        const all = tripPlaces();
+                        all[k] = { town, cc: a.country_code || '' };
+                        try { localStorage.setItem(TRIP_PLACES_KEY, JSON.stringify(all)); } catch (e) { /* fine: asks again next time */ }
+                        renderTrips();
+                    }
+                } catch (e) { /* offline: the guessed name stands */ }
+                placePending.delete(k);
+                await new Promise(r => setTimeout(r, 1100));
+            });
+        }
+
+        function tripTitle(t) {
+            const named = storedName(t, tripNames);
+            if (named) return named;
+            const place = t.centre && tripPlaces()[placeKey(t.centre)];
+            return place ? place.town : t.guessTitle;
+        }
+        function tripFlag(t) {
+            const place = t.centre && tripPlaces()[placeKey(t.centre)];
+            return place && place.cc && place.cc !== 'gb' ? flagEmoji(place.cc) : '';
+        }
+
+        function renderTrips() {
+            const section = document.getElementById('trips-section');
+            const row = document.getElementById('trips-row');
+            if (!section || !row) return;
+            const trips = currentTrips();
+            if (!trips.length) { section.classList.add('hidden'); row.innerHTML = ''; return; }
+            section.classList.remove('hidden');
+            trips.forEach(t => { if (t.centre && !storedName(t, tripNames)) lookUpPlace(t.centre); });
+            row.innerHTML = trips.map(t => {
+                const cover = t.coverPhoto
+                    ? `<img class="trip-card-cover" src="${esc(t.coverPhoto.photoUrl)}" alt="" loading="lazy">`
+                    : `<div class="trip-card-cover is-empty">${tripFlag(t) || '🧳'}</div>`;
+                return `
+                    <button type="button" class="trip-card" data-trip="${t.key}">
+                        ${cover}
+                        <div class="p-3">
+                            <p class="font-bold text-gray-800 truncate">${esc(tripTitle(t))} ${tripFlag(t)}</p>
+                            <p class="text-xs text-gray-500">${tripDates(t)}</p>
+                            <p class="text-xs text-gray-400 mt-1">${t.days} day${t.days === 1 ? '' : 's'} · ${t.steps.both.toLocaleString()} steps</p>
+                        </div>
+                    </button>`;
+            }).join('');
+            // Keep an open trip page current if a log changes underneath it.
+            if (openTripKey) {
+                const t = trips.find(x => x.key === openTripKey || x.dayKeys.includes(openTripKey));
+                if (t) openTrip(t.key, { keepScroll: true }); else closeTrip();
+            }
+        }
+
+        let openTripKey = null;
+        let tripMap = null;
+        function openTrip(key, { keepScroll = false } = {}) {
+            const t = currentTrips().find(x => x.key === key);
+            const page = document.getElementById('trip-page');
+            if (!t || !page) return;
+            const scroll = keepScroll ? page.scrollTop : 0;
+            openTripKey = t.key;
+            const names = { user1: userData.user1.name, user2: userData.user2.name };
+            const ink = { user1: '#15803d', user2: '#7e22ce' };
+            const short = (d) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+            const place = (name) => esc(String(name || '').split(',')[0]);
+
+            const wall = t.photos.map((p, i) => `
+                <div class="trip-polaroid" style="--rot: ${[-3, 2, -1.5, 3, -2, 1][i % 6]}deg">
+                    <img class="trip-photo" src="${esc(p.photoUrl)}" data-id="${p.id}" data-url="${esc(p.photoUrl)}" alt="" loading="lazy">
+                    <p>${p.locationName ? place(p.locationName) + ' · ' : ''}${short(p.date)}</p>
+                </div>`).join('');
+
+            const days = t.dayKeys.map(k => {
+                const dl = t.logs.filter(l => tripDayKey(l.date) === k);
+                const d = new Date(k + 'T12:00');
+                const who = (uid) => {
+                    const mine = dl.filter(l => l.userId === uid);
+                    const steps = mine.reduce((a, l) => a + (l.steps || 0), 0);
+                    const moved = [...new Set(mine.flatMap(l => logActivities(l)))].map(id => activityFor(id).emoji).join('');
+                    return `<span style="color:${ink[uid]}" class="font-semibold">${steps ? steps.toLocaleString() : '—'}</span>${moved ? ` <span>${moved}</span>` : ''}`;
+                };
+                const where = dl.find(l => l.locationName);
+                const notes = dl.filter(l => l.note && String(l.note).trim())
+                    .map(l => `<p class="text-xs text-gray-600 italic mt-1"><span style="color:${ink[l.userId]}" class="not-italic font-semibold">${esc(names[l.userId])}</span> “${esc(l.note)}”</p>`).join('');
+                return `
+                    <div class="py-2 border-b border-gray-100">
+                        <div class="flex justify-between items-baseline gap-2 text-sm">
+                            <span class="text-gray-700 font-semibold whitespace-nowrap">${short(d)}</span>
+                            <span class="text-xs text-gray-400 truncate">${where ? '📍 ' + place(where.locationName) : ''}</span>
+                        </div>
+                        <div class="flex gap-4 text-sm mt-0.5">${who('user1')}${who('user2')}</div>
+                        ${notes}
+                    </div>`;
+            }).join('');
+
+            page.innerHTML = `
+                <div class="max-w-3xl mx-auto p-4 pb-12">
+                    <div class="flex justify-between items-center mb-3">
+                        <button type="button" id="trip-close" class="text-gray-500 text-sm font-semibold py-2 pr-3">‹ Back</button>
+                        <button type="button" id="trip-rename" class="text-gray-400 text-sm py-2 pl-3" title="Rename">✏️ Rename</button>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-gray-800">${esc(tripTitle(t))} ${tripFlag(t)}</h2>
+                    <p class="text-sm text-gray-500">${tripDates(t)} · ${t.days} day${t.days === 1 ? '' : 's'}</p>
+
+                    <div class="grid grid-cols-3 gap-2 text-center mt-4">
+                        <div class="rounded-xl bg-gray-50 p-2"><p class="text-lg font-black text-gray-700">${t.steps.both.toLocaleString()}</p><p class="text-[10px] text-gray-400">steps together</p></div>
+                        <div class="rounded-xl bg-gray-50 p-2"><p class="text-lg font-black" style="color:${ink.user1}">${t.steps.user1.toLocaleString()}</p><p class="text-[10px] text-gray-400">${esc(names.user1)}</p></div>
+                        <div class="rounded-xl bg-gray-50 p-2"><p class="text-lg font-black" style="color:${ink.user2}">${t.steps.user2.toLocaleString()}</p><p class="text-[10px] text-gray-400">${esc(names.user2)}</p></div>
+                    </div>
+                    ${t.furthest ? `<p class="text-xs text-gray-500 text-center mt-2">Furthest point: ${place(t.furthest.name) || 'here'} · ${Math.round(t.furthest.km).toLocaleString()} km from Wrexham</p>` : ''}
+
+                    ${t.photos.length ? `<h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mt-6 mb-3">Photos</h3><div class="trip-wall">${wall}</div>` : ''}
+
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mt-6 mb-2">Where</h3>
+                    <div id="trip-map"></div>
+
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mt-6 mb-1">Day by day</h3>
+                    <div>${days}</div>
+                </div>`;
+            page.classList.remove('hidden');
+            document.body.classList.add('trip-lock');
+            page.scrollTop = scroll;
+
+            // The trip's own little map: made when the page opens, gone when it
+            // closes, so the main map is never touched.
+            if (tripMap) { tripMap.remove(); tripMap = null; }
+            if (t.points.length) {
+                tripMap = L.map('trip-map', { zoomControl: false, attributionControl: false });
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(tripMap);
+                t.points.forEach(p => L.circleMarker([p.lat, p.lng], {
+                    radius: 7, weight: 2, color: '#fff', fillOpacity: 0.9, fillColor: p.uid === 'user1' ? '#22c55e' : '#a855f7'
+                }).bindPopup(`${place(p.name)}`).addTo(tripMap));
+                tripMap.fitBounds(L.latLngBounds(t.points.map(p => [p.lat, p.lng])), { padding: [24, 24], maxZoom: 14 });
+            } else {
+                document.getElementById('trip-map').outerHTML = '<p class="text-xs text-gray-400">No places tagged.</p>';
+            }
+        }
+
+        function closeTrip() {
+            const page = document.getElementById('trip-page');
+            if (tripMap) { tripMap.remove(); tripMap = null; }
+            openTripKey = null;
+            if (page) { page.classList.add('hidden'); page.innerHTML = ''; }
+            document.body.classList.remove('trip-lock');
+        }
+
+        const tripDayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+        document.addEventListener('click', (e) => {
+            const card = e.target.closest('.trip-card');
+            if (card) { openTrip(card.dataset.trip); return; }
+            if (e.target.closest('#trip-close')) { closeTrip(); return; }
+            if (e.target.closest('#trip-rename')) {
+                const t = currentTrips().find(x => x.key === openTripKey);
+                if (!t) return;
+                const current = storedName(t, tripNames) || '';
+                showModal('Rename trip', `<input id="m-trip-name" class="w-full border p-2 rounded" maxlength="40" placeholder="${esc(tripTitle(t))}" value="${esc(current)}">
+                    <p class="text-[11px] text-gray-400 mt-2">Leave it empty to go back to the place name.</p>`, async () => {
+                    const name = document.getElementById('m-trip-name').value.trim();
+                    const names = { ...tripNames };
+                    // One key per trip: drop any older key inside it, then set the first day.
+                    t.dayKeys.forEach(k => { delete names[k]; });
+                    if (name) names[t.key] = name;
+                    try {
+                        // The whole map, not a merge: a merge keeps nested keys, so a
+                        // cleared name would never actually go.
+                        await setDoc(tripsDocRef, { names });
+                    } catch (err) {
+                        alert('Could not save the name: ' + (err.message || err));
+                    }
+                });
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && openTripKey && document.getElementById('modal-overlay').classList.contains('hidden')
+                && document.getElementById('lightbox-overlay').classList.contains('hidden')) closeTrip();
+        });
+
+        // In the console: what counts as a trip, and why the near-misses don't.
+        window.tripAudit = () => {
+            const trips = findTrips(logData);
+            console.table(trips.map(t => ({ name: tripTitle(t), dates: tripDates(t), days: t.days, 'km away': Math.round(t.maxKm), photos: t.photos.length })));
+            const days = dayStates(logData);
+            const why = { solo: [], apart: [] };
+            days.forEach(d => { if (why[d.kind]) why[d.kind].push(d.key); });
+            console.log(`Days one of you was away and the other was at home (not trips): ${why.solo.length ? why.solo.join(', ') : 'none'}`);
+            console.log(`Days you were both away but more than 50 km apart: ${why.apart.length ? why.apart.join(', ') : 'none'}`);
+            return trips.length;
+        };
+
         // --- 🕰️ "A year ago today" ---
 
         const esc = (s) => String(s == null ? '' : s)
@@ -2208,7 +2469,7 @@
                 return;
             }
             // Clicking a thumbnail (log list) or popup photo (map) opens the lightbox.
-            const photoEl = e.target.closest('.log-photo-thumb, .popup-photo');
+            const photoEl = e.target.closest('.log-photo-thumb, .popup-photo, .trip-photo');
             if (photoEl) {
                 const lb = document.getElementById('lightbox-overlay');
                 const img = document.getElementById('lightbox-img');
@@ -2745,6 +3006,7 @@
             renderRivalry();
             renderStretch();
             renderHighScores();
+            renderTrips();
             renderMap();
             renderWrappedBanner();
             renderWrappedRecap();
@@ -2897,6 +3159,10 @@
             onSnapshot(user2DocRef, (doc) => {
                 if(doc.exists()) userData.user2 = { ...userData.user2, ...doc.data() };
                 updateUI();
+            });
+            onSnapshot(tripsDocRef, (d) => {
+                tripNames = (d.exists() && d.data().names) || {};
+                renderTrips();
             });
             const logsQuery = query(logsCollectionRef, orderBy("date", "desc"));
             onSnapshot(logsQuery, (snapshot) => {
