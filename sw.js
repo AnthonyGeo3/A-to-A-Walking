@@ -1,9 +1,10 @@
-const CACHE_NAME = 'a2a-walking-v19';
+const CACHE_NAME = 'a2a-walking-v20';
 const CORE_ASSETS = [
   '/A-to-A-Walking/',
   '/A-to-A-Walking/index.html',
   '/A-to-A-Walking/wrapped.js',
   '/A-to-A-Walking/wrapped.css',
+  '/A-to-A-Walking/activity.js',
   '/A-to-A-Walking/icon-192x192.png',
   '/A-to-A-Walking/icon-512x512.png',
   'https://cdn.tailwindcss.com',

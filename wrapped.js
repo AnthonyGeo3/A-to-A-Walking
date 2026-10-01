@@ -268,6 +268,11 @@ export function computeWrapped(logs, yearN, opts = {}) {
             longestLoggedStreak,
             bestWeekday,
             weekdayMeans,
+            // Days with exercise ticked, for the dot on the calendar. Only the
+            // day matters here; which activity is the main page's business.
+            exerciseDays: new Set(userLogs
+                .filter((l) => Array.isArray(l.exercise) && l.exercise.length)
+                .map((l) => dayKey(l.date))),
             photos: {
                 list: photoLogs,
                 count: photoLogs.length,
@@ -2238,8 +2243,9 @@ export function yearHeatmapHtml(stats, { dark = false, readout = true } = {}) {
                 // higher on the dark surface than on the white page.
                 const intensity = steps > 0 ? Math.max(dark ? 0.32 : 0.16, Math.min(1, steps / cap)) : 0;
                 const bg = steps > 0 ? `rgba(${rgb}, ${intensity.toFixed(2)})` : '';
-                html += `<div class="recap-heat-cell" style="${bg ? `background:${bg}` : ''}"
-                    data-steps="${steps}" data-who="${esc(stats.names[uid])}"
+                const moved = !!(stats[uid].exerciseDays && stats[uid].exerciseDays.has(dayKey(entry.date)));
+                html += `<div class="recap-heat-cell${moved ? ' has-moved' : ''}" style="${bg ? `background:${bg}` : ''}"
+                    data-steps="${steps}" data-who="${esc(stats.names[uid])}"${moved ? ' data-moved="1"' : ''}
                     data-when="${esc(entry.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}"></div>`;
             }
         });
@@ -2400,7 +2406,7 @@ export function mountRecap(host, stats, { onPlay, expanded = false, onExpand } =
             const cell = e.target.closest('.recap-heat-cell');
             if (!cell || !cell.dataset.when) return;
             const steps = Number(cell.dataset.steps) || 0;
-            readout.textContent = `${cell.dataset.who} · ${cell.dataset.when} · ${steps > 0 ? `${fmt(steps)} steps` : 'no steps'}`;
+            readout.textContent = `${cell.dataset.who} · ${cell.dataset.when} · ${steps > 0 ? `${fmt(steps)} steps` : 'no steps'}${cell.dataset.moved ? ' · 💪 active' : ''}`;
         });
     }
     return host;

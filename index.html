@@ -232,6 +232,37 @@
             -webkit-backdrop-filter: blur(20px);
             box-shadow: 0 4px 24px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
         }
+        /* --- Exercise days --- */
+        .exercise-pill {
+            font-size: 13px; font-weight: 600; color: #6b7280;
+            padding: 6px 14px; border-radius: 99px;
+            border: 1px dashed #d1d5db; background: #fff;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .exercise-pill[aria-pressed="true"] {
+            color: #92400e; background: #fef3c7; border: 1px solid #fcd34d;
+        }
+        .exercise-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+        .exercise-chip {
+            font-size: 12px; font-weight: 600; color: #4b5563;
+            padding: 5px 10px; border-radius: 99px;
+            border: 1px solid #e5e7eb; background: #fff;
+        }
+        .exercise-chip[aria-pressed="true"] { color: #92400e; background: #fef3c7; border-color: #fcd34d; }
+        .exercise-other { width: 100%; max-width: 220px; font-size: 13px; padding: 5px 10px;
+            border: 1px solid #e5e7eb; border-radius: 8px; text-align: center; }
+        .log-exercise { margin-left: 4px; letter-spacing: 1px; white-space: nowrap; }
+        .log-exercise-empty { opacity: 0.28; filter: grayscale(1); font-size: 11px; }
+        /* A day you exercised on the month heatmap: a white dot ringed in your
+           colour, so it shows on an empty cell and on your darkest day alike. */
+        .heatmap-cell.has-moved::after {
+            content: ''; position: absolute; right: 2px; bottom: 2px;
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #fff; box-shadow: 0 0 0 1.5px var(--moved-ring, #9ca3af);
+        }
+        .active-days-name { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+        .active-days-big { font-size: 22px; font-weight: 900; line-height: 1.1; font-variant-numeric: tabular-nums; }
+
         .section-tinted {
             background: linear-gradient(180deg, #fafafa 0%, rgba(255,255,255,0) 100%);
             border-top: 1px solid rgba(0,0,0,0.04);
@@ -349,6 +380,11 @@
                     <input type="number" id="step-input" inputmode="numeric" placeholder="0" class="flex-1 text-center p-2 border rounded-lg text-lg" required min="1">
                     <button type="submit" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Add</button>
                 </div>
+                <!-- Exercise: optional, off by default, and nothing is lost by leaving it off -->
+                <div class="flex flex-col items-center gap-2 w-full">
+                    <button type="button" id="exercise-toggle" class="exercise-pill" aria-pressed="false">💪 Exercised</button>
+                    <div id="exercise-form-picker" class="hidden w-full"></div>
+                </div>
             </form>
         </div>
 
@@ -371,6 +407,7 @@
                 <div id="user1-stats-card" class="card-ant"></div>
                 <div id="user2-stats-card" class="card-amy"></div>
             </div>
+            <div id="active-days" class="hidden mt-4"></div>
             <div id="heatmap-container" class="mt-4"></div>
             <p id="heatmap-tap-info" class="text-center text-xs text-gray-400 mt-1 h-4"></p>
             <div id="rivalry-container" class="mt-4"></div>
@@ -496,6 +533,8 @@
         import { computeWrapped, openWrapped, wrappedYears, yearWord, mountRecap,
                  hasLoggedFinalDay,
                  CHALLENGE_START_YEAR, challengeYearStart, challengeYearEnd } from './wrapped.js';
+        import { ACTIVITIES, activityFor, logActivities, describe as describeActivities, activityDays,
+                 activitySummary, anyExercise, exerciseFromPicker } from './activity.js';
 
         // --- ⚙️ CHALLENGE DATA ---
         const USER_1_NAME = "Ant";
@@ -1226,7 +1265,7 @@
                             ${thumb}
                             <div class="min-w-0 flex-1">
                                 <span class="font-bold ${uid==='user1'?'text-green-600':'text-purple-600'}">${l.steps.toLocaleString()}</span>
-                                <span class="text-gray-400 ml-1 cursor-pointer hover:underline edit-date" data-id="${l.id}" data-date="${l.date.toDate().toISOString().split('T')[0]}">${date}</span>
+                                <span class="text-gray-400 ml-1 cursor-pointer hover:underline edit-date" data-id="${l.id}" data-date="${l.date.toDate().toISOString().split('T')[0]}" style="white-space: nowrap;">${date}</span>${exerciseBadge(l)}
                                 ${l.note ? `<div class="text-gray-600 italic">"${l.note}"</div>` : ''}
                                 ${l.locationName ? `<div class="text-gray-500 truncate max-w-[140px] sm:max-w-[180px] show-location cursor-pointer hover:underline" data-loc="${(l.locationName || '').replace(/"/g, '&quot;')}">📍 ${l.locationName}</div>` : ''}
                             </div>
@@ -1398,6 +1437,11 @@
 
             // Build per-day step totals for each user
             const dayTotals = { user1: {}, user2: {} };
+            const monthStartDate = new Date(year, month, 1), monthEndDate = new Date(year, month + 1, 1);
+            const moved = {
+                user1: activityDays(logData, 'user1', monthStartDate, monthEndDate),
+                user2: activityDays(logData, 'user2', monthStartDate, monthEndDate)
+            };
             logData.forEach(log => {
                 const d = log.date.toDate();
                 if (d.getFullYear() === year && d.getMonth() === month) {
@@ -1444,9 +1488,11 @@
                     const bg = steps > 0 ? `rgba(${rgb}, ${intensity})` : '#f3f4f6';
                     const border = isToday ? `border: 1.5px solid rgba(${rgb}, 0.8);` : '';
                     const textColor = intensity > 0.5 ? 'color: white;' : 'color: #9ca3af;';
-                    const title = steps > 0 ? `${steps.toLocaleString()} steps` : 'No steps';
+                    const dayIds = moved[uid].get(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`) || [];
+                    const movedAttr = dayIds.length ? ` data-moved="${dayIds.map(id => `${activityFor(id).emoji} ${activityFor(id).label}`).join(' · ')}"` : '';
+                    const ring = uid === 'user1' ? '#16a34a' : '#9333ea';
 
-                    html += `<div class="heatmap-cell" style="background: ${bg}; ${border} ${textColor} cursor: pointer;" data-steps="${steps}" data-day="${d}" data-name="${name}">${d}</div>`;
+                    html += `<div class="heatmap-cell${dayIds.length ? ' has-moved' : ''}" style="background: ${bg}; ${border} ${textColor} cursor: pointer; --moved-ring: ${ring};" data-steps="${steps}" data-day="${d}" data-name="${name}"${movedAttr}>${d}</div>`;
                 }
 
                 html += '</div></div>';
@@ -1465,9 +1511,10 @@
                     const cell = e.target.closest('.heatmap-cell');
                     if (!cell || !cell.dataset.day) return;
                     const steps = parseInt(cell.dataset.steps);
-                    tapInfo.textContent = steps > 0
+                    tapInfo.textContent = (steps > 0
                         ? `${cell.dataset.name} · ${cell.dataset.day} ${heatmapMonthName} · ${steps.toLocaleString()} steps`
-                        : `${cell.dataset.name} · ${cell.dataset.day} ${heatmapMonthName} · No steps`;
+                        : `${cell.dataset.name} · ${cell.dataset.day} ${heatmapMonthName} · No steps`)
+                        + (cell.dataset.moved ? ` · ${cell.dataset.moved}` : '');
                 });
             }
         }
@@ -1936,6 +1983,101 @@
             });
         }
 
+        // --- 💪 Exercise picker ---
+        // The same chips serve the form and the edit modal. Each picker is a plain
+        // container; its state lives in the chips' aria-pressed, so there is
+        // nothing to keep in sync.
+        function exercisePickerHtml(selected = [], otherText = '') {
+            const chips = ACTIVITIES.map(a => `
+                <button type="button" class="exercise-chip" data-activity="${a.id}"
+                        aria-pressed="${selected.includes(a.id) ? 'true' : 'false'}">${a.emoji} ${a.label}</button>`).join('');
+            const showOther = selected.includes('other');
+            return `
+                <div class="exercise-chips">${chips}</div>
+                <div class="flex justify-center mt-2${showOther ? '' : ' hidden'}" data-other-row>
+                    <input type="text" class="exercise-other" maxlength="30" placeholder="What was it? (optional)"
+                           value="${String(otherText || '').replace(/"/g, '&quot;')}">
+                </div>`;
+        }
+
+        // Returns the fields to save, or null when nothing should be saved.
+        function readExercisePicker(host, on) {
+            if (!host) return null;
+            const chosen = [...host.querySelectorAll('.exercise-chip[aria-pressed="true"]')].map(b => b.dataset.activity);
+            const other = host.querySelector('.exercise-other');
+            return exerciseFromPicker(on, chosen, other ? other.value : '');
+        }
+
+        function setExerciseToggle(on) {
+            const toggle = document.getElementById('exercise-toggle');
+            const picker = document.getElementById('exercise-form-picker');
+            toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+            if (on && !picker.innerHTML.trim()) picker.innerHTML = exercisePickerHtml();
+            picker.classList.toggle('hidden', !on);
+        }
+
+        function resetExerciseToggle() {
+            const picker = document.getElementById('exercise-form-picker');
+            picker.innerHTML = '';
+            setExerciseToggle(false);
+        }
+
+        document.getElementById('exercise-toggle').addEventListener('click', () => {
+            const on = document.getElementById('exercise-toggle').getAttribute('aria-pressed') !== 'true';
+            setExerciseToggle(on);
+        });
+
+        // Chips toggle wherever they are — form or modal.
+        document.addEventListener('click', e => {
+            const chip = e.target.closest('.exercise-chip');
+            if (!chip) return;
+            const pressed = chip.getAttribute('aria-pressed') === 'true';
+            chip.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+            if (chip.dataset.activity === 'other') {
+                const row = chip.closest('.exercise-chips').parentElement.querySelector('[data-other-row]');
+                if (row) row.classList.toggle('hidden', pressed);
+            }
+        });
+
+        // Inline after the date, so the entry stays the size it always was. With
+        // nothing ticked it is a faint 💪 to tap for backfilling; with something
+        // ticked it is the emoji themselves, and tapping those edits them.
+        function exerciseBadge(l) {
+            const ids = logActivities(l);
+            if (!ids.length) {
+                return `<button type="button" class="edit-exercise log-exercise log-exercise-empty" data-id="${l.id}" title="Add exercise" aria-label="Add exercise">💪</button>`;
+            }
+            const title = describeActivities(ids, l.exerciseOther).replace(/"/g, '&quot;');
+            return `<button type="button" class="edit-exercise log-exercise" data-id="${l.id}" title="${title}" aria-label="Exercise: ${title}">${ids.map(id => activityFor(id).emoji).join('')}</button>`;
+        }
+
+        // --- 💪 Active days ---
+        // Counts of days, never a fraction of seven: rest days are meant to happen,
+        // and a day off looks exactly like it always has.
+        function renderActiveDays() {
+            const host = document.getElementById('active-days');
+            if (!host) return;
+            if (!anyExercise(logData)) { host.classList.add('hidden'); host.innerHTML = ''; return; }
+            host.classList.remove('hidden');
+            const col = (uid) => {
+                const s = activitySummary(logData, uid, new Date());
+                const ink = uid === 'user1' ? '#15803d' : '#7e22ce';
+                const top = s.byActivity.slice(0, 3)
+                    .map(a => `<span title="${a.label}">${a.emoji} ${a.days}</span>`).join('<span class="text-gray-300"> · </span>');
+                return `
+                    <div class="text-center">
+                        <p class="active-days-name" style="color:${ink}">${userData[uid].name}</p>
+                        <p class="active-days-big" style="color:${ink}">${s.week}</p>
+                        <p class="text-[11px] text-gray-500">this week</p>
+                        <p class="text-[11px] text-gray-500 mt-1">${s.month} this month · ${s.year} this year</p>
+                        ${top ? `<p class="text-xs text-gray-600 mt-1">${top}</p>` : ''}
+                    </div>`;
+            };
+            host.innerHTML = `
+                <h3 class="text-sm font-bold text-gray-700 text-center mb-2">💪 Active days</h3>
+                <div class="grid grid-cols-2 gap-4">${col('user1')}${col('user2')}</div>`;
+        }
+
         // --- Interaction ---
         const modal = document.getElementById('modal-overlay');
         // One log on the last night of the year can set off both a milestone and
@@ -1998,6 +2140,18 @@
             if(btn.classList.contains('edit-note')) {
                 showModal('Edit Note', `<textarea id="m-note" class="w-full border p-2 rounded" maxlength="150">${btn.dataset.note}</textarea>`, async () => {
                     await updateDoc(doc(logsCollectionRef, btn.dataset.id), { note: document.getElementById('m-note').value });
+                });
+            }
+            if(btn.classList.contains('edit-exercise')) {
+                const l = logData.find(x => x.id === btn.dataset.id);
+                if (!l) return;
+                showModal('Exercise', `<div id="m-exercise">${exercisePickerHtml(logActivities(l), l.exerciseOther || '')}</div>
+                    <p class="text-[11px] text-gray-400 text-center mt-3">Nothing picked clears it.</p>`, async () => {
+                    const host = document.getElementById('m-exercise');
+                    const chosen = [...host.querySelectorAll('.exercise-chip[aria-pressed="true"]')];
+                    // In the modal, picking nothing means "no exercise" rather than "Other".
+                    const fields = chosen.length ? readExercisePicker(host, true) : { exercise: [] };
+                    await updateDoc(doc(logsCollectionRef, btn.dataset.id), { exerciseOther: '', ...fields });
                 });
             }
             if(btn.classList.contains('edit-loc')) {
@@ -2160,6 +2314,9 @@
             const oldAnnual = annualSteps[currentUser];
             const countsThisYear = getChallengeYear(selectedDate) === currentChallengeYear();
 
+            const exercise = readExercisePicker(document.getElementById('exercise-form-picker'),
+                document.getElementById('exercise-toggle').getAttribute('aria-pressed') === 'true');
+
             stepInput.disabled = true;
             // Hold the Wrapped until this log has been dealt with. The write
             // lands, the snapshot comes back and the year can finish — all
@@ -2173,10 +2330,13 @@
                     const newTotal = uDoc.data().steps + steps;
                     t.update(uDoc.ref, { steps: newTotal });
                     t.set(doc(logsCollectionRef), {
-                        userId: currentUser, steps: steps, note: "", date: Timestamp.fromDate(selectedDate)
+                        userId: currentUser, steps: steps, note: "", date: Timestamp.fromDate(selectedDate),
+                        // Only present when ticked, so a plain log looks exactly like one from before.
+                        ...(exercise || {})
                     });
                 });
                 stepForm.reset();
+                resetExerciseToggle();
                 
                 // Celebrations fire on *crossing*, checked here rather than on render —
                 // so nothing can be missed depending on what happens to be on screen.
@@ -2301,7 +2461,7 @@
                 .map(l => ({
                     id: l.id, userId: l.userId, steps: l.steps, date: l.date.toDate(),
                     note: l.note, photoUrl: l.photoUrl, locationName: l.locationName,
-                    lat: l.lat, lng: l.lng
+                    lat: l.lat, lng: l.lng, exercise: l.exercise, exerciseOther: l.exerciseOther
                 }));
         }
 
@@ -2485,6 +2645,7 @@
             renderPassport();
             renderLogs();
             calculateAndRenderStats();
+            renderActiveDays();
             renderHeatmap();
             renderRivalry();
             renderStretch();

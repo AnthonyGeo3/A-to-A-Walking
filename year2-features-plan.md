@@ -67,13 +67,10 @@ by default. Tapping it opens a row of chips underneath:
 - The exercise belongs to the date in the date stepper, like the steps do.
 
 **On the log entry.** The chosen emoji appear on the entry next to the date,
-for example `12,403  30 Sep  🏃🏸`. For entries that already exist, a new 💪
-button joins the photo, location, note and delete buttons and opens the same
-chips in a modal. That is how you backfill Chester Zoo and the Couch to 5K
-weeks.
-- The action buttons are a 2×2 grid today. Five buttons fit as a 3×2 grid.
-  Check at 390px that the entry text doesn't get squeezed; if it does, stack
-  the buttons in a single column.
+for example `12,403  30 Sep  🏃🏸`. Tapping them opens the same chips in a
+modal. An entry with nothing ticked shows a faint 💪 in the same spot, which is
+how you backfill Chester Zoo and the Couch to 5K weeks. *(Built inline rather
+than as a fifth action button: a fifth button made every entry a row taller.)*
 
 **On the heatmap calendar** (Stats section and Recap): a day where you
 exercised gets a small dot in the bottom-right corner of its cell, in your
