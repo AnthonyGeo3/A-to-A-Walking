@@ -388,6 +388,28 @@
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #trip-map { height: 220px; border-radius: 12px; }
 
+        /* --- The world view --- */
+        .map-switch { display: flex; justify-content: center; gap: 6px; margin-bottom: 10px; }
+        .map-switch button {
+            font-size: 12px; font-weight: 700; color: #6b7280; padding: 6px 12px; border-radius: 99px;
+            background: #f3f4f6; border: 1px solid transparent;
+        }
+        .map-switch button[aria-pressed="true"] { color: #111827; background: #fff; border-color: #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .world-pin {
+            width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: 900; font-size: 13px;
+            display: flex; align-items: center; justify-content: center;
+            border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+        }
+        .world-pin.ant { background: #16a34a; }
+        .world-pin.amy { background: #9333ea; }
+        .world-home { font-size: 20px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3)); }
+        .world-chips { display: flex; gap: 4px; background: rgba(255,255,255,0.95); padding: 3px; border-radius: 99px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+        .world-chips button { font-size: 11px; font-weight: 700; color: #6b7280; padding: 4px 9px; border-radius: 99px; }
+        .world-chips button[aria-pressed="true"] { background: #111827; color: #fff; }
+        .world-whole { font-size: 11px; font-weight: 700; color: #374151; padding: 5px 9px; border-radius: 99px;
+            background: rgba(255,255,255,0.95); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+
         .section-tinted {
             background: linear-gradient(180deg, #fafafa 0%, rgba(255,255,255,0) 100%);
             border-top: 1px solid rgba(0,0,0,0.04);
@@ -595,6 +617,11 @@
                     <div id="user2-log" class="max-h-64 overflow-y-auto space-y-2"></div>
                 </div>
             </div>
+            <!-- Our walks is always the map you open on; the world view is a second look. -->
+            <div class="map-switch" role="group" aria-label="Map view">
+                <button type="button" data-view="walks" aria-pressed="true">📍 Our walks</button>
+                <button type="button" data-view="world" aria-pressed="false">🌍 How far we've come</button>
+            </div>
             <div id="map-wrapper" class="relative">
                 <button id="map-fullscreen-btn" type="button"
                         class="absolute top-2 right-2 z-[1001] bg-white shadow-md rounded-md w-9 h-9 flex items-center justify-center text-gray-700 hover:bg-gray-50 active:scale-95 transition"
@@ -614,6 +641,7 @@
                 </button>
                 <div id="map" class="h-80 rounded-lg shadow-md"></div>
             </div>
+            <div id="world-caption" class="hidden mt-2 space-y-1"></div>
         </div>
 
         <!-- Year Recap — appears once a challenge year is over, and stays -->
@@ -665,8 +693,9 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
         import { computeWrapped, openWrapped, wrappedYears, yearWord, mountRecap,
-                 hasLoggedFinalDay,
+                 hasLoggedFinalDay, HOME,
                  CHALLENGE_START_YEAR, challengeYearStart, challengeYearEnd } from './wrapped.js';
+        import { placeStamps, positionFor, ringSegments } from './journey.js';
         import { findTrips, dayStates, storedName, tripDates, flagEmoji } from './trips.js';
         import { ACTIVITIES, activityFor, logActivities, describe as describeActivities, activityDays,
                  activitySummary, anyExercise, exerciseFromPicker } from './activity.js';
@@ -3008,6 +3037,7 @@
             renderHighScores();
             renderTrips();
             renderMap();
+            renderWorld();
             renderWrappedBanner();
             renderWrappedRecap();
             maybeAutoPlayWrapped();
@@ -3048,6 +3078,149 @@
             }
         }
         seasonDrift();
+
+        // --- 🌍 The world view ---
+        // Every stamp sits at its straight-line distance from Wrexham, so the
+        // honest picture is a ring for each of you: everywhere as far from home as
+        // you have walked. Your "A" sits on your ring, facing your next stamp.
+        // It's a second look at the same map: "Our walks" is always where it opens,
+        // and switching back puts the camera exactly where you left it.
+        let mapView = 'walks';
+        let worldScope = 'all';          // 'all' time is the default; 'year' is this challenge year
+        let worldLayer = null;
+        let worldControls = [];
+        let walksCamera = null;
+
+        function setMapView(view) {
+            if (!map || view === mapView) return;
+            document.querySelectorAll('.map-switch button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === view ? 'true' : 'false'));
+            const caption = document.getElementById('world-caption');
+            if (view === 'world') {
+                walksCamera = { center: map.getCenter(), zoom: map.getZoom() };
+                map.removeLayer(markers);
+                worldLayer = L.layerGroup().addTo(map);
+                addWorldControls();
+                mapView = 'world';
+                renderWorld({ frame: true });
+                caption.classList.remove('hidden');
+            } else {
+                if (worldLayer) { map.removeLayer(worldLayer); worldLayer = null; }
+                worldControls.forEach(c => c.remove());
+                worldControls = [];
+                markers.addTo(map);
+                mapView = 'walks';
+                if (walksCamera) map.setView(walksCamera.center, walksCamera.zoom, { animate: false });
+                caption.classList.add('hidden');
+                caption.innerHTML = '';
+            }
+        }
+
+        function addWorldControls() {
+            const chips = L.control({ position: 'topleft' });
+            chips.onAdd = () => {
+                const el = L.DomUtil.create('div', 'world-chips');
+                el.innerHTML = `<button type="button" data-scope="all" aria-pressed="${worldScope === 'all'}">All time</button>
+                                <button type="button" data-scope="year" aria-pressed="${worldScope === 'year'}">This year</button>`;
+                L.DomEvent.disableClickPropagation(el);
+                el.addEventListener('click', e => {
+                    const b = e.target.closest('button');
+                    if (!b) return;
+                    worldScope = b.dataset.scope;
+                    el.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+                    renderWorld({ frame: true });
+                });
+                return el;
+            };
+            const whole = L.control({ position: 'bottomleft' });
+            whole.onAdd = () => {
+                const el = L.DomUtil.create('button', 'world-whole');
+                el.type = 'button';
+                el.textContent = '🌍 Whole world';
+                L.DomEvent.disableClickPropagation(el);
+                el.addEventListener('click', () => map.setView([20, 10], 1));
+                return el;
+            };
+            chips.addTo(map); whole.addTo(map);
+            worldControls = [chips, whole];
+        }
+
+        function renderWorld({ frame = false } = {}) {
+            if (mapView !== 'world' || !worldLayer) return;
+            worldLayer.clearLayers();
+            const yearly = worldScope === 'year';
+            const list = yearly ? MASTER_MILESTONES : ALL_MILESTONES;
+            const stepsOf = (uid) => (yearly ? annualSteps[uid] : totalSteps(uid)) || 0;
+            const people = ['user1', 'user2'].map(uid => ({ uid, steps: stepsOf(uid), pos: positionFor(stepsOf(uid), list) }));
+            // Heading for the same stamp, the two of you sit on almost the same
+            // spot. Then each pin is drawn beside its point rather than on it, Ant
+            // to the left and Amy to the right, so both show at any zoom.
+            const sameWay = !!(people[0].pos.next && people[1].pos.next && people[0].pos.next.steps === people[1].pos.next.steps);
+            const colour = { user1: '#16a34a', user2: '#9333ea' };
+            const dates = getMilestoneAchievementDates();
+            const furthest = Math.max(...people.map(p => p.steps));
+            const fmtD = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+            // Stamps: everywhere either of you has reached, and the next few ahead.
+            const places = placeStamps(list);
+            const upcoming = places.filter(p => p.steps > furthest).slice(0, 6);
+            places.filter(p => p.steps <= furthest).concat(upcoming).forEach(p => {
+                const reached = p.steps <= furthest;
+                let who = '';
+                if (reached) {
+                    const got = ['user1', 'user2'].map(uid => {
+                        if (yearly) {
+                            const yr = currentChallengeYear();
+                            const e = dates.annual[p.steps] && dates.annual[p.steps][uid] && dates.annual[p.steps][uid].find(x => x.year === yr);
+                            return e ? { uid, date: e.date } : null;
+                        }
+                        const d = dates.allTime[p.steps] && dates.allTime[p.steps][uid];
+                        return d ? { uid, date: d } : null;
+                    }).filter(Boolean).sort((a, b) => a.date - b.date);
+                    who = got.length
+                        ? `<br><span style="color:${colour[got[0].uid]}">${esc(userData[got[0].uid].name)}</span> got there first · ${fmtD(got[0].date)}`
+                          + (got[1] ? `<br><span style="color:${colour[got[1].uid]}">${esc(userData[got[1].uid].name)}</span> · ${fmtD(got[1].date)}` : '')
+                        : '';
+                }
+                L.circleMarker([p.lat, p.lng], reached
+                    ? { radius: 4, weight: 1, color: '#fff', fillColor: '#374151', fillOpacity: 0.85 }
+                    : { radius: 4, weight: 1.5, color: '#6b7280', fillOpacity: 0, dashArray: '2 2' })
+                    .bindPopup(`<strong>${esc(p.label)}</strong><br><span style="color:#6b7280">${esc(p.description || '')}</span>${who}${reached ? '' : '<br><em>Not yet</em>'}`)
+                    .addTo(worldLayer);
+            });
+
+            // Home, then the two rings, then the two of you on them.
+            L.marker([HOME.lat, HOME.lng], { icon: L.divIcon({ className: '', html: '<div class="world-home">🏠</div>', iconSize: [22, 22], iconAnchor: [11, 11] }) })
+                .bindPopup('Wrexham — where every journey starts').addTo(worldLayer);
+            people.forEach(({ uid, pos }) => {
+                ringSegments(pos.km).forEach(seg => L.polyline(seg, { color: colour[uid], weight: 2, opacity: 0.8, interactive: false }).addTo(worldLayer));
+            });
+            people.forEach(({ uid, steps, pos }) => {
+                const next = pos.next ? `Next: ${esc(pos.next.label)} · ${pos.toGo.toLocaleString()} steps to go` : 'Every stamp reached';
+                L.marker([pos.point.lat, pos.point.lng], {
+                    icon: L.divIcon({ className: '', html: `<div class="world-pin ${uid === 'user1' ? 'ant' : 'amy'}">A</div>`, iconSize: [26, 26],
+                        iconAnchor: sameWay ? [uid === 'user1' ? 25 : 1, 13] : [13, 13] }),
+                    zIndexOffset: 1000
+                }).bindPopup(`<strong style="color:${colour[uid]}">${esc(userData[uid].name)}</strong> · ${Math.round(pos.km).toLocaleString()} km from home<br>${next}`)
+                  .addTo(worldLayer);
+            });
+
+            const caption = document.getElementById('world-caption');
+            caption.innerHTML = people.map(({ uid, steps, pos }) => `
+                <p class="text-xs text-gray-600 text-center">
+                    <span class="font-bold" style="color:${colour[uid]}">${esc(userData[uid].name)}</span>
+                    · ${Math.round(pos.km).toLocaleString()} km from home
+                    ${pos.next ? `· next <strong>${esc(pos.next.label)}</strong>, ${pos.toGo.toLocaleString()} to go` : '· every stamp reached'}
+                </p>`).join('') + `<p class="text-[10px] text-gray-400 text-center">${yearly ? 'This year, since 1 October' : 'All time'} · each ring is everywhere that far from Wrexham</p>`;
+
+            if (frame) {
+                const km = Math.max(...people.map(p => p.pos.km));
+                if (km < 30) { map.setView([HOME.lat, HOME.lng], 7, { animate: false }); return; }
+                const pts = people.flatMap(p => ringSegments(p.pos.km).flat()).concat([[HOME.lat, HOME.lng]]);
+                map.fitBounds(L.latLngBounds(pts), { padding: [16, 16], maxZoom: 7, animate: false });
+            }
+        }
+
+        document.querySelectorAll('.map-switch button').forEach(b => b.addEventListener('click', () => setMapView(b.dataset.view)));
 
         // --- Setup ---
         function initializeMap() {
