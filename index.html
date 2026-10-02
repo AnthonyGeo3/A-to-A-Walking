@@ -199,6 +199,28 @@
             transform: translateX(-50%);
         }
         .marker-ghost { opacity: 0.4; }
+        .ghost-hit {
+            position: absolute; top: -20px; width: 34px; height: 30px;
+            transform: translateX(-50%); z-index: 25;
+            background: transparent; border: 0; padding: 0; cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* A speech bubble from the faint triangle: what you'd done by now last year. */
+        .ghost-bubble {
+            /* Display only: its tail sits over the triangle, and a tap there is
+               meant for the triangle, to close it. */
+            pointer-events: none;
+            position: absolute; bottom: calc(100% + 10px); z-index: 30;
+            transform: translateX(calc(-1 * var(--anchor)));
+            background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 10px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+            padding: 6px 10px; white-space: nowrap; font-size: 11px; line-height: 1.5; color: #6b7280;
+        }
+        .ghost-bubble strong { color: var(--ghost); font-weight: 800; font-variant-numeric: tabular-nums; }
+        .ghost-bubble::after {
+            content: ''; position: absolute; top: 100%; left: var(--anchor); transform: translateX(-50%);
+            border: 7px solid transparent; border-top-color: #fff; filter: drop-shadow(0 1px 0 rgba(0,0,0,0.08));
+        }
 
         /* Slim all-time strip — the journey that never resets */
         .mini-track {
@@ -976,6 +998,8 @@
         // day of the *previous* challenge year (the "ghost" — you vs. you).
         let annualSteps = { user1: 0, user2: 0 };
         let ghostSteps  = { user1: 0, user2: 0 };
+        // Just the one day: what each of you walked on this day last year.
+        let ghostDay    = { user1: 0, user2: 0 };
         // The never-resetting cumulative total, summed straight from the logs — the same
         // source the annual figures come from, so the two journeys can't drift apart.
         let allTimeSteps = { user1: 0, user2: 0 };
@@ -993,7 +1017,10 @@
 
             annualSteps = { user1: 0, user2: 0 };
             ghostSteps  = { user1: 0, user2: 0 };
+            ghostDay    = { user1: 0, user2: 0 };
             allTimeSteps = { user1: 0, user2: 0 };
+            const prevDay = new Date(prevCutoff);
+            prevDay.setDate(prevDay.getDate() - 1); // the last day inside the cut-off: this day last year
             logData.forEach(l => {
                 if (!(l.userId in annualSteps)) return;
                 // Every log counts towards the all-time total, dated or not.
@@ -1001,7 +1028,10 @@
                 if (!l.date) return;
                 const d = l.date.toDate();
                 if (d >= yrStart && d < yrEnd) annualSteps[l.userId] += l.steps;
-                else if (yr > 1 && d >= prevStart && d < prevCutoff) ghostSteps[l.userId] += l.steps;
+                else if (yr > 1 && d >= prevStart && d < prevCutoff) {
+                    ghostSteps[l.userId] += l.steps;
+                    if (d >= prevDay) ghostDay[l.userId] += l.steps;
+                }
             });
         }
 
@@ -1195,7 +1225,12 @@
                     <!-- Peer marker (triangle up from the bottom) — the other one of you, this year -->
                     <div class="peer-marker bottom" style="left: ${peerPct}%; border-bottom-color: ${peerColour};" title="${userData[peer].name}"></div>
                     ${ghost > 0 ? `<!-- Ghost marker (triangle down from the top) — you, on this day last year -->
-                    <div class="peer-marker top marker-ghost" style="left: ${ghostPct}%; border-top-color: ${ownColour};" title="You this time last year · ${ghost.toLocaleString()}"></div>` : ''}
+                    <div class="peer-marker top marker-ghost" style="left: ${ghostPct}%; border-top-color: ${ownColour};"></div>
+                    <!-- Tapping it says what you'd done by now last year. The triangle is
+                         tiny, so the tap target is a finger-sized invisible button over it. -->
+                    <button type="button" class="ghost-hit" data-ghost="${uid}" style="left: ${ghostPct}%;"
+                            aria-label="You this time last year" aria-expanded="${ghostOpen[uid] ? 'true' : 'false'}"></button>
+                    ${ghostOpen[uid] ? ghostBubbleHtml(uid, ghostPct, ownColour) : ''}` : ''}
                 </div>
                 <div class="text-[10px] flex justify-between mt-1 text-gray-500">
                     <span>${mine.toLocaleString()} steps · ${(mine / 2100).toFixed(1)} mi · ${(mine / 1300).toFixed(1)} km</span>
@@ -1216,6 +1251,29 @@
                 </div>
             `;
         }
+
+        // Which of the "this time last year" bubbles are open. Kept outside the
+        // render so a log landing from the other phone doesn't snap it shut.
+        const ghostOpen = { user1: false, user2: false };
+
+        function ghostBubbleHtml(uid, pct, colour) {
+            // Near either end of the bar the bubble slides inwards so it stays on
+            // the card, and its tail moves the other way to keep pointing at the
+            // triangle.
+            const anchor = pct < 18 ? 12 : pct > 82 ? 88 : 50;
+            return `
+                <div class="ghost-bubble" style="left: ${pct}%; --anchor: ${anchor}%; --ghost: ${colour};" role="status">
+                    <div><strong>${ghostDay[uid].toLocaleString()}</strong> <span>this day last year</span></div>
+                    <div><strong>${ghostSteps[uid].toLocaleString()}</strong> <span>by this day last year</span></div>
+                </div>`;
+        }
+
+        document.addEventListener('click', (e) => {
+            const hit = e.target.closest('.ghost-hit');
+            if (!hit) return;
+            ghostOpen[hit.dataset.ghost] = !ghostOpen[hit.dataset.ghost];
+            renderBars();
+        });
 
         function renderBars() {
             document.getElementById('ant-progress-row').innerHTML = progressCardHtml('user1');
