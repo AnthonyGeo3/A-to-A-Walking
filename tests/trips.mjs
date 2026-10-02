@@ -141,5 +141,75 @@ await page.waitForTimeout(300);
 const offline = await page.$$eval('.trip-card', (n) => n.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
 c.check('offline, trips still show under the place you tagged', offline.length === 3 && offline.some((x) => /Caesars Palace|The Bellagio/.test(x)), JSON.stringify(offline));
 c.check('no page errors offline', errors.length === 0, errors.join(' | '));
+// --- the real Vegas trip, as it was logged, and fixing dates by hand ---
+const PLACES = {
+  4: [{ lat: 51.47, lng: -0.4543, locationName: 'Heathrow Airport' }, { lat: 36.084, lng: -115.1537, locationName: 'Harry Reid International Airport' }],
+  5: [{ lat: 36.1023, lng: -115.1745, locationName: 'New York New York Hotel and Casino' }, { lat: 36.1707, lng: -115.1462, locationName: 'Fremont Street' }],
+  6: [{ lat: 36.1125, lng: -115.1707, locationName: 'Eiffel Tower' }, { lat: 36.0121, lng: -113.8107, locationName: 'Grand Canyon Skywalk' }],
+  7: [{ lat: 36.1513, lng: -115.1527, locationName: 'Little White Chapel' }, { lat: 36.1172, lng: -115.1727, locationName: "Gordon Ramsay's Hell's Kitchen" }],
+  8: [{ lat: 36.1208, lng: -115.1622, locationName: 'Sphere' }, { lat: 36.1247, lng: -115.1677, locationName: 'The Palazzo Theater' }],
+  9: [{ lat: 36.1126, lng: -115.1767, locationName: 'Kalologie | The Bellagio | IV Therapy & More' }, { lat: 36.1126, lng: -115.1741, locationName: 'Fountains of Bellagio' }],
+  10: [{ lat: 36.084, lng: -115.1537, locationName: 'Harry Reid International Airport' }, { lat: 51.47, lng: -0.4543, locationName: 'Heathrow Airport' }]
+};
+const realLogs = dailyLogs(new Date(2026, 2, 1), new Date(2026, 4, 1), {
+  extra: (uid, at) => {
+    if (at.getMonth() !== 3) return {};
+    const p = PLACES[at.getDate()];
+    const out = p ? p[uid === 'user1' ? 0 : 1] : {};
+    if (at.getDate() === 3 && uid === 'user1') return { ...out, photoUrl: photo(90, 'packing') };
+    if (at.getDate() === 7 && uid === 'user1') return { ...out, photoUrl: photo(30, 'wedding') };
+    return out;
+  }
+});
+({ page, errors } = await boot(browser, { fixture: { logs: realLogs }, geocode: () => ({ address: { county: 'Clark County', country_code: 'us' } }), time: new Date(2026, 9, 14, 21, 0) }));
+await page.waitForTimeout(400);
+let real = await page.$$eval('.trip-card', (n) => n.map((x) => [x.dataset.trip, x.textContent.replace(/\s+/g, ' ').trim()]));
+c.check('the real Vegas trip comes out as one trip', real.length === 1, JSON.stringify(real));
+c.check('from the 4th to the 10th', real.length === 1 && real[0][0] === '2026-04-04' && /4–10 Apr 2026/.test(real[0][1]) && /7 days/.test(real[0][1]), real[0] && real[0][1]);
+
+// Name it, then widen the dates by hand: the 3rd (packing) to the 11th.
+await page.click('.trip-card[data-trip="2026-04-04"]');
+await page.click('#trip-rename'); await page.fill('#m-trip-name', 'Vegas wedding'); await page.click('#modal-confirm');
+await page.waitForTimeout(250);
+await page.click('#trip-dates');
+c.check('the dates editor starts on the trip as it is', await page.inputValue('#m-trip-start') === '2026-04-04' && await page.inputValue('#m-trip-end') === '2026-04-10');
+await page.fill('#m-trip-start', '2026-04-03');
+await page.fill('#m-trip-end', '2026-04-11');
+await page.click('#modal-confirm');
+await page.waitForTimeout(400);
+let doc = await page.evaluate(() => { const k = Object.keys(window.__fb.cols).find((p) => /challengeData$/.test(p)); return window.__fb.cols[k].get('trips'); });
+c.check('your dates are saved, shared', doc && JSON.stringify(doc.custom) === '[{"start":"2026-04-03","end":"2026-04-11"}]', JSON.stringify(doc));
+c.check('the name follows the trip to its new first day', doc && doc.names['2026-04-03'] === 'Vegas wedding' && !('2026-04-04' in doc.names), JSON.stringify(doc && doc.names));
+const pageText = (await page.textContent('#trip-page')).replace(/\s+/g, ' ');
+c.check('the open page redraws with the new dates', /Vegas wedding/.test(pageText) && /3–11 Apr 2026 · 9 days/.test(pageText), pageText.slice(0, 120));
+c.check('and the photos fill in from them, the packing one included', (await page.$$('#trip-page .trip-photo')).length === 2);
+c.check('nine days in the day-by-day list', (await page.$$('#trip-page .border-b')).length === 9);
+await page.click('#trip-close');
+real = await page.$$eval('.trip-card', (n) => n.map((x) => x.dataset.trip));
+c.check('still just one card', JSON.stringify(real) === '["2026-04-03"]', JSON.stringify(real));
+
+// Undo: back to the automatic dates.
+await page.click('.trip-card[data-trip="2026-04-03"]');
+await page.click('#trip-dates');
+c.check('a trip with your dates offers to undo them', /Undo my dates/.test(await page.textContent('#modal-content')));
+await page.check('#m-trip-undo');
+await page.click('#modal-confirm');
+await page.waitForTimeout(400);
+real = await page.$$eval('.trip-card', (n) => n.map((x) => [x.dataset.trip, x.textContent.replace(/\s+/g, ' ').trim()]));
+c.check('undoing goes back to the automatic trip', real.length === 1 && real[0][0] === '2026-04-04', JSON.stringify(real));
+c.check('and keeps its name', real.length === 1 && /Vegas wedding/.test(real[0][1]));
+
+// "This isn't a trip."
+await page.click('.trip-card[data-trip="2026-04-04"]');
+await page.click('#trip-dates');
+c.check('an automatic trip offers to remove it', /isn't a trip/.test(await page.textContent('#modal-content')));
+await page.check('#m-trip-undo');
+await page.click('#modal-confirm');
+await page.waitForTimeout(400);
+c.check('removing it takes the card away', (await page.$$('.trip-card')).length === 0 && !await page.isVisible('#trip-page'));
+doc = await page.evaluate(() => { const k = Object.keys(window.__fb.cols).find((p) => /challengeData$/.test(p)); return window.__fb.cols[k].get('trips'); });
+c.check('remembered as not a trip', doc && doc.hidden.includes('2026-04-04'), JSON.stringify(doc));
+c.check('no page errors editing trips', errors.length === 0, errors.join(' | '));
+
 await browser.close();
 c.done();

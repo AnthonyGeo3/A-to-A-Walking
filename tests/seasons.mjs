@@ -66,14 +66,17 @@ for (const v of variants) {
   await page.context().close();
 }
 
-// --- the long press still opens the Wrapped preview through the decoration ---
+// --- the decoration never gets in the way of a tap ---
 {
   const { page, errors } = await boot(browser, { time: new Date(2026, 11, 20, 21, 0), fixture: { logs } });
+  const pe = await page.evaluate(() => {
+    const h = document.getElementById('app-header');
+    return [getComputedStyle(h, '::before').pointerEvents, getComputedStyle(h, '::after').pointerEvents];
+  });
+  c.check('the corner pieces never take a tap', pe.every((x) => x === 'none'), pe.join(','));
   const box = await page.locator('#header-subtitle').boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down(); await page.waitForTimeout(1100); await page.mouse.up();
-  await page.waitForTimeout(300);
-  c.check('the long press on the subtitle still works', await page.$('.wrapped-overlay') !== null);
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y).id, [box.x + box.width / 2, box.y + box.height / 2]);
+  c.check('the subtitle is still on top of them', hit === 'header-subtitle', hit);
   c.check('no page errors at Christmas', errors.length === 0, errors.join(' | '));
   await page.context().close();
 }

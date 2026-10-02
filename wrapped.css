@@ -217,38 +217,6 @@ body.wrapped-lock { overflow: hidden; }
 .wrapped-btn-primary { background: #fff; color: #0b0f1a; }
 .wrapped-btn-primary:hover { background: #e7e7ea; }
 
-/* --- the banner on the main page ------------------------------------------ */
-
-.wrapped-banner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    border: 0;
-    cursor: pointer;
-    text-align: left;
-    padding: 12px 14px;
-    border-radius: 12px;
-    color: #fff;
-    background: linear-gradient(120deg, #0b0f1a 0%, #1b2440 55%, #3b1d5e 100%);
-    box-shadow: 0 6px 18px rgba(11, 15, 26, 0.28);
-}
-.wrapped-banner .wrapped-banner-gift { font-size: 22px; }
-.wrapped-banner .wrapped-banner-text { flex: 1; min-width: 0; }
-/* Both are spans, and an inline span will not stack — without this the title and
-   the line under it run together on one line. */
-.wrapped-banner .wrapped-banner-title { display: block; font-weight: 800; font-size: 14px; }
-.wrapped-banner .wrapped-banner-sub { display: block; font-size: 11px; color: rgba(255, 255, 255, 0.65); }
-.wrapped-banner .wrapped-banner-go {
-    font-size: 12px;
-    font-weight: 700;
-    background: rgba(255, 255, 255, 0.16);
-    border-radius: 999px;
-    padding: 6px 14px;
-    flex-shrink: 0;
-}
-
-
 /* --- month chapters ------------------------------------------------------- */
 
 .wrapped-month-name {

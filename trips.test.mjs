@@ -1,7 +1,7 @@
 // Tests for trip scrapbooks.   node --test trips.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findTrips, dayStates, townFrom, flagEmoji, storedName, tripDates, TOGETHER_KM } from './trips.js';
+import { findTrips, dayStates, townFrom, flagEmoji, storedName, tripDates, TOGETHER_KM, togetherLimit, tripFromRange, applyTripEdits } from './trips.js';
 
 const D = (y, m, d, hh = 20) => new Date(y, m - 1, d, hh);
 let n = 0;
@@ -167,4 +167,91 @@ test('flags', () => {
 
 test('Liverpool is right on the edge, and a single day there is no trip', () => {
     assert.equal(findTrips(both(D(2026, 7, 4), LIVERPOOL)).length, 0);
+});
+
+// --- The real Vegas trip, as it was logged -----------------------------------
+// 3rd and 11th: nothing tagged. 4th: Ant at Heathrow, Amy already at Harry Reid.
+// 6th: the Vegas Eiffel Tower and the Grand Canyon Skywalk, ~190 km apart.
+// 10th: Harry Reid and Heathrow again. It's one trip, the 4th to the 10th.
+const HEATHROW = [51.47, -0.4543, 'Heathrow Airport'];
+const HARRY_REID = [36.084, -115.1537, 'Harry Reid International Airport'];
+const NYNY = [36.1023, -115.1745, 'New York New York Hotel and Casino'];
+const FREMONT = [36.1707, -115.1462, 'Fremont Street'];
+const VEGAS_EIFFEL = [36.1125, -115.1707, 'Eiffel Tower'];
+const SKYWALK = [36.0121, -113.8107, 'Grand Canyon Skywalk'];
+const CHAPEL = [36.1513, -115.1527, 'Little White Chapel'];
+const HELLS = [36.1172, -115.1727, "Gordon Ramsay's Hell's Kitchen"];
+const SPHERE = [36.1208, -115.1622, 'Sphere'];
+const PALAZZO = [36.1247, -115.1677, 'The Palazzo Theater'];
+const KALOLOGIE = [36.1126, -115.1767, 'Kalologie | The Bellagio | IV Therapy & More'];
+const FOUNTAINS = [36.1126, -115.1741, 'Fountains of Bellagio'];
+function realVegas() {
+    return [
+        log('user1', D(2026, 4, 3)), log('user2', D(2026, 4, 3)),
+        log('user1', D(2026, 4, 4), HEATHROW), log('user2', D(2026, 4, 4), HARRY_REID),
+        log('user1', D(2026, 4, 5), NYNY), log('user2', D(2026, 4, 5), FREMONT),
+        log('user1', D(2026, 4, 6), VEGAS_EIFFEL), log('user2', D(2026, 4, 6), SKYWALK),
+        log('user1', D(2026, 4, 7), CHAPEL), log('user2', D(2026, 4, 7), HELLS),
+        log('user1', D(2026, 4, 8), SPHERE), log('user2', D(2026, 4, 8), PALAZZO),
+        log('user1', D(2026, 4, 9), KALOLOGIE), log('user2', D(2026, 4, 9), FOUNTAINS),
+        log('user1', D(2026, 4, 10), HARRY_REID), log('user2', D(2026, 4, 10), HEATHROW),
+        log('user1', D(2026, 4, 11)), log('user2', D(2026, 4, 11)),
+        log('user1', D(2026, 4, 12), WREXHAM), log('user2', D(2026, 4, 12), WREXHAM)
+    ];
+}
+
+test('the real Vegas trip is one trip, 4th to 10th', () => {
+    const trips = findTrips(realVegas());
+    assert.equal(trips.length, 1, JSON.stringify(trips.map((t) => [t.key, t.days])));
+    assert.equal(trips[0].key, '2026-04-04');
+    assert.equal(trips[0].dayKeys[trips[0].dayKeys.length - 1], '2026-04-10');
+    assert.equal(trips[0].days, 7);
+});
+
+test('the Grand Canyon day still counts as together, that far from home', () => {
+    assert.equal(dayStates(realVegas()).get('2026-04-06').kind, 'together');
+    assert.ok(togetherLimit(8000, 7900) > 300);
+    assert.equal(togetherLimit(260, 330), TOGETHER_KM, 'close to home it stays strict');
+});
+
+test('the airport days are apart, and join the ends of the trip', () => {
+    const days = dayStates(realVegas());
+    assert.equal(days.get('2026-04-04').kind, 'apart');
+    assert.equal(days.get('2026-04-10').kind, 'apart');
+});
+
+test('an apart day with neither of you near the trip does not join it', () => {
+    // Ant in London, Amy in Edinburgh, the day before Vegas: nothing to do with it.
+    const logs = [log('user1', D(2026, 4, 4), LONDON), log('user2', D(2026, 4, 4), EDINBURGH), ...realVegas().filter((l) => l.date.getDate() >= 5)];
+    assert.equal(findTrips(logs)[0].key, '2026-04-05');
+});
+
+test('dates you set yourself replace the automatic trip', () => {
+    const logs = realVegas();
+    const auto = findTrips(logs);
+    const trips = applyTripEdits(auto, logs, { custom: [{ start: '2026-04-03', end: '2026-04-11' }] });
+    assert.equal(trips.length, 1);
+    assert.equal(trips[0].manual, true);
+    assert.equal(trips[0].key, '2026-04-03');
+    assert.equal(trips[0].days, 9);
+    assert.equal(trips[0].steps.both, 18 * 10000, 'every log in the range, tagged or not');
+});
+
+test('a manual range can swallow two automatic trips', () => {
+    const logs = [...both(D(2026, 6, 1), EDINBURGH), ...both(D(2026, 6, 2), EDINBURGH), ...both(D(2026, 6, 3), WREXHAM), ...both(D(2026, 6, 4), YORK)];
+    assert.equal(findTrips(logs).length, 2);
+    const merged = applyTripEdits(findTrips(logs), logs, { custom: [{ start: '2026-06-01', end: '2026-06-04' }] });
+    assert.equal(merged.length, 1);
+});
+
+test('a trip you say is not a trip goes, by any of its days', () => {
+    const logs = realVegas();
+    assert.equal(applyTripEdits(findTrips(logs), logs, { hidden: ['2026-04-07'] }).length, 0);
+    assert.equal(applyTripEdits(findTrips(logs), logs, { hidden: ['2026-05-01'] }).length, 1);
+});
+
+test('nonsense edits are ignored', () => {
+    const logs = realVegas();
+    assert.equal(applyTripEdits(findTrips(logs), logs, { custom: [{ start: '2026-04-09', end: '2026-04-02' }, null, {}] }).length, 1);
+    assert.equal(tripFromRange(logs, '2026-04-04', '2026-04-04').days, 1);
 });
