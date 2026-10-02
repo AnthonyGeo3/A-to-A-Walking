@@ -52,10 +52,20 @@ c.check('both can be open at once', (await page.$$('.ghost-bubble')).length === 
 await logSteps(page, 'Amy', 4000);
 c.check('a log landing doesn\'t snap it shut', (await page.$$('.ghost-bubble')).length === 2);
 
+// Anywhere on the bubble closes it: the words, the far corner, the tail.
+await page.click('#ant-progress-row .ghost-bubble strong');
+c.check('tapping the bubble hides it', !await page.$('#ant-progress-row .ghost-bubble') && !!await page.$('#amy-progress-row .ghost-bubble'));
+const corner = await page.locator('#amy-progress-row .ghost-bubble').boundingBox();
+await page.mouse.click(corner.x + 4, corner.y + 4);
+c.check('even at its far corner', (await page.$$('.ghost-bubble')).length === 0);
+// The triangle still toggles both ways.
+// (Tapped by position, like a finger: with the bubble open its tail sits over
+// the triangle, and either way the tap closes it.)
 await page.click('#ant-progress-row .ghost-hit');
-c.check('tapping again hides it', !await page.$('#ant-progress-row .ghost-bubble') && !!await page.$('#amy-progress-row .ghost-bubble'));
-await page.click('#amy-progress-row .ghost-hit');
-c.check('and hides Amy\'s too', (await page.$$('.ghost-bubble')).length === 0);
+c.check('the triangle opens it again', (await page.$$('.ghost-bubble')).length === 1);
+const tri = await page.locator('#ant-progress-row .ghost-hit').boundingBox();
+await page.mouse.click(tri.x + tri.width / 2, tri.y + tri.height / 2);
+c.check('and tapping the triangle closes it', (await page.$$('.ghost-bubble')).length === 0);
 c.check('no page errors', errors.length === 0, errors.join(' | '));
 await page.context().close();
 
