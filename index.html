@@ -207,9 +207,8 @@
         }
         /* A speech bubble from the faint triangle: what you'd done by now last year. */
         .ghost-bubble {
-            /* Display only: its tail sits over the triangle, and a tap there is
-               meant for the triangle, to close it. */
-            pointer-events: none;
+            /* Tapping anywhere on it closes it, tail included. */
+            cursor: pointer;
             position: absolute; bottom: calc(100% + 10px); z-index: 30;
             transform: translateX(calc(-1 * var(--anchor)));
             background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 10px;
@@ -1262,14 +1261,15 @@
             // triangle.
             const anchor = pct < 18 ? 12 : pct > 82 ? 88 : 50;
             return `
-                <div class="ghost-bubble" style="left: ${pct}%; --anchor: ${anchor}%; --ghost: ${colour};" role="status">
+                <div class="ghost-bubble" data-ghost="${uid}" style="left: ${pct}%; --anchor: ${anchor}%; --ghost: ${colour};" role="status">
                     <div><strong>${ghostDay[uid].toLocaleString()}</strong> <span>this day last year</span></div>
                     <div><strong>${ghostSteps[uid].toLocaleString()}</strong> <span>by this day last year</span></div>
                 </div>`;
         }
 
         document.addEventListener('click', (e) => {
-            const hit = e.target.closest('.ghost-hit');
+            // The triangle opens and closes it; anywhere on the bubble closes it.
+            const hit = e.target.closest('.ghost-hit, .ghost-bubble');
             if (!hit) return;
             ghostOpen[hit.dataset.ghost] = !ghostOpen[hit.dataset.ghost];
             renderBars();
