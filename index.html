@@ -510,8 +510,6 @@
 
         <div class="p-4 sm:p-6">
 
-        <!-- Year Wrapped banner — hidden until a challenge year is actually over -->
-        <div id="wrapped-banner" class="hidden mb-6"></div>
 
         <!-- Input Section -->
         <div class="p-4 rounded-xl mb-8" style="background: linear-gradient(135deg, #f0fdf4 0%, #faf5ff 100%); border: 1px solid rgba(0,0,0,0.05);">
@@ -693,10 +691,10 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
         import { computeWrapped, openWrapped, wrappedYears, yearWord, mountRecap,
-                 hasLoggedFinalDay, HOME,
+                 hasLoggedFinalDay, HOME, finalDayOf, challengeYearAt,
                  CHALLENGE_START_YEAR, challengeYearStart, challengeYearEnd } from './wrapped.js';
         import { placeStamps, positionFor, ringSegments } from './journey.js';
-        import { findTrips, dayStates, storedName, tripDates, flagEmoji } from './trips.js';
+        import { findTrips, dayStates, storedName, tripDates, flagEmoji, applyTripEdits } from './trips.js';
         import { ACTIVITIES, activityFor, logActivities, describe as describeActivities, activityDays,
                  activitySummary, anyExercise, exerciseFromPicker } from './activity.js';
 
@@ -1760,11 +1758,27 @@
         // Found from the logs every render (trips.js), named in this order: the
         // name you gave it, else the town at its centre (looked up once and kept
         // on the phone), else the most common place you tagged.
+        // Everything you've changed about trips lives in one shared document:
+        //   names:  { firstDay: 'Vegas wedding' }
+        //   custom: [{ start, end }]  — dates you set yourself, replacing the automatic trip
+        //   hidden: [day]             — automatic trips you said weren't trips
         let tripNames = {};
-        let tripsCache = { logs: null, trips: [] };
+        let tripEdits = { custom: [], hidden: [] };
+        let tripsCache = { logs: null, edits: null, trips: [] };
         function currentTrips() {
-            if (tripsCache.logs !== logData) tripsCache = { logs: logData, trips: findTrips(logData) };
+            if (tripsCache.logs !== logData || tripsCache.edits !== tripEdits) {
+                tripsCache = { logs: logData, edits: tripEdits, trips: applyTripEdits(findTrips(logData), logData, tripEdits) };
+            }
             return tripsCache.trips;
+        }
+        // Always written whole: a merge keeps nested keys, so a cleared name or an
+        // undone edit would never actually go.
+        async function saveTripDoc({ names = tripNames, custom = tripEdits.custom, hidden = tripEdits.hidden } = {}) {
+            try {
+                await setDoc(tripsDocRef, { names, custom, hidden });
+            } catch (err) {
+                alert('Could not save that: ' + (err.message || err));
+            }
         }
 
         const TRIP_PLACES_KEY = 'a2a-trip-places';
@@ -1884,7 +1898,10 @@
                 <div class="max-w-3xl mx-auto p-4 pb-12">
                     <div class="flex justify-between items-center mb-3">
                         <button type="button" id="trip-close" class="text-gray-500 text-sm font-semibold py-2 pr-3">‹ Back</button>
-                        <button type="button" id="trip-rename" class="text-gray-400 text-sm py-2 pl-3" title="Rename">✏️ Rename</button>
+                        <span>
+                            <button type="button" id="trip-dates" class="text-gray-400 text-sm py-2 pl-3" title="Change the dates">📅 Dates</button>
+                            <button type="button" id="trip-rename" class="text-gray-400 text-sm py-2 pl-3" title="Rename">✏️ Rename</button>
+                        </span>
                     </div>
                     <h2 class="text-2xl font-extrabold text-gray-800">${esc(tripTitle(t))} ${tripFlag(t)}</h2>
                     <p class="text-sm text-gray-500">${tripDates(t)} · ${t.days} day${t.days === 1 ? '' : 's'}</p>
@@ -1948,13 +1965,56 @@
                     // One key per trip: drop any older key inside it, then set the first day.
                     t.dayKeys.forEach(k => { delete names[k]; });
                     if (name) names[t.key] = name;
-                    try {
-                        // The whole map, not a merge: a merge keeps nested keys, so a
-                        // cleared name would never actually go.
-                        await setDoc(tripsDocRef, { names });
-                    } catch (err) {
-                        alert('Could not save the name: ' + (err.message || err));
+                    await saveTripDoc({ names });
+                });
+            }
+            if (e.target.closest('#trip-dates')) {
+                const t = currentTrips().find(x => x.key === openTripKey);
+                if (!t) return;
+                const end = t.dayKeys[t.dayKeys.length - 1];
+                const undoLabel = t.manual ? 'Undo my dates — go back to automatic' : "This isn't a trip — remove it";
+                showModal('Trip dates', `
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="text-xs text-gray-500">From<input type="date" id="m-trip-start" class="w-full border p-2 rounded text-sm" value="${t.key}"></label>
+                        <label class="text-xs text-gray-500">To<input type="date" id="m-trip-end" class="w-full border p-2 rounded text-sm" value="${end}"></label>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-2">Photos, steps and the day-by-day list fill in from whatever you both logged on those days.</p>
+                    <label class="flex items-center gap-2 text-sm text-red-600 mt-3"><input type="checkbox" id="m-trip-undo"> ${undoLabel}</label>
+                    <p id="m-trip-error" class="text-xs text-red-600 mt-2"></p>`, async () => {
+                    const start = document.getElementById('m-trip-start').value;
+                    const finish = document.getElementById('m-trip-end').value;
+                    const undo = document.getElementById('m-trip-undo').checked;
+                    // Drop any range of mine this trip came from.
+                    const custom = tripEdits.custom.filter(r => !(r.start <= end && r.end >= t.key));
+                    const hidden = [...tripEdits.hidden];
+                    const names = { ...tripNames };
+                    if (undo) {
+                        if (!t.manual) {
+                            hidden.push(t.key);
+                        } else {
+                            // Going back to automatic: the name moves onto whichever
+                            // automatic trip comes back in its place.
+                            const name = storedName(t, tripNames);
+                            const back = applyTripEdits(findTrips(logData), logData, { custom, hidden })
+                                .find(x => x.dayKeys[0] <= end && x.dayKeys[x.dayKeys.length - 1] >= t.key);
+                            if (name && back) { t.dayKeys.forEach(k => { delete names[k]; }); names[back.key] = name; }
+                        }
+                        closeTrip();
+                        await saveTripDoc({ names, custom, hidden });
+                        return;
                     }
+                    if (!start || !finish || start > finish) { alert('The trip needs to end on or after the day it starts.'); return; }
+                    if ((new Date(finish) - new Date(start)) / 86400000 > 90) { alert('That is a very long trip — 90 days at most.'); return; }
+                    custom.push({ start, end: finish });
+                    // The name follows the trip to its new first day.
+                    const name = storedName(t, tripNames);
+                    t.dayKeys.forEach(k => { delete names[k]; });
+                    if (name) names[start] = name;
+                    // Keep the page open across the change: point it at a day that's
+                    // in both the old trip and the new one where there is one, so
+                    // whichever version renders first, it's found.
+                    openTripKey = start <= t.key && finish >= t.key ? t.key : start;
+                    await saveTripDoc({ names, custom, hidden });
                 });
             }
         });
@@ -1965,8 +2025,8 @@
 
         // In the console: what counts as a trip, and why the near-misses don't.
         window.tripAudit = () => {
-            const trips = findTrips(logData);
-            console.table(trips.map(t => ({ name: tripTitle(t), dates: tripDates(t), days: t.days, 'km away': Math.round(t.maxKm), photos: t.photos.length })));
+            const trips = currentTrips();
+            console.table(trips.map(t => ({ name: tripTitle(t), dates: tripDates(t), days: t.days, 'km away': Math.round(t.maxKm), photos: t.photos.length, 'dates set by you': !!t.manual })));
             const days = dayStates(logData);
             const why = { solo: [], apart: [] };
             days.forEach(d => { if (why[d.kind]) why[d.kind].push(d.key); });
@@ -2469,7 +2529,7 @@
         // the Wrapped. The milestone goes first; this hands over on the way out.
         const closeModal = () => {
             modal.classList.add('hidden');
-            maybeAutoPlayWrapped();
+            tryPendingWrapped();
         };
 
         const showModal = (title, content, onConfirm, confirmText) => {
@@ -2659,6 +2719,9 @@
 
                 currentUser = e.target.dataset.user;
                 const isAnt = currentUser === 'user1';
+                // On the last night the Recap is opened per person, so who's
+                // picked decides whether it shows.
+                renderWrappedRecap();
                 
                 Array.from(userSelector.children).forEach(button => {
                     const isSelected = button.dataset.user === currentUser;
@@ -2698,6 +2761,7 @@
             // actually falls inside the current challenge year.
             const oldAnnual = annualSteps[currentUser];
             const countsThisYear = getChallengeYear(selectedDate) === currentChallengeYear();
+            const loggedFor = new Date(selectedDate);
 
             const exercise = readExercisePicker(document.getElementById('exercise-form-picker'),
                 document.getElementById('exercise-toggle').getAttribute('aria-pressed') === 'true');
@@ -2722,6 +2786,10 @@
                 });
                 stepForm.reset();
                 resetExerciseToggle();
+                {
+                    const year = challengeYearAt(loggedFor);
+                    if (sameDay(loggedFor, finalDayOf(year)) && !wrappedSeen(year)) wrappedPending = { year, uid: currentUser };
+                }
                 
                 // Celebrations fire on *crossing*, checked here rather than on render —
                 // so nothing can be missed depending on what happens to be on screen.
@@ -2768,10 +2836,11 @@
             finally {
                 stepInput.disabled = false;
                 wrappedHold = false;
-                // The last night of the year: if that log finished it, this is
-                // where the show starts. If a milestone modal is up, it waits
-                // again and closing the modal calls back here.
-                maybeAutoPlayWrapped();
+                // The last night of the year: if that log was for the year's
+                // final day, this is where the show starts. Logged after midnight
+                // as "yesterday" counts too. If a milestone modal is up, it waits,
+                // and closing the modal calls back here.
+                tryPendingWrapped();
             }
         }
 
@@ -2779,16 +2848,17 @@
         // Date-gated on purpose: none of this renders until a challenge year is
         // actually over, which is what keeps it a surprise without needing anything
         // deployed on the day.
-        //   ?wrapped=preview  → treat the current year as complete, for a look first
-        //   ?wrapped=1        → same, and open it straight away
-        // Neither records the year as seen, so the real first play is still the
-        // first play.
+        //   ?wrapped=preview  → show the Recap (and its Play button) for the year
+        //                       still in progress, for a look first
+        //
+        // The show opens in exactly two ways, and never on its own when the app
+        // loads: logging the last day of a year (30 September), and the Play
+        // button in the Recap at the bottom.
         const wrappedFlag = new URLSearchParams(location.search).get('wrapped');
-        const WRAPPED_PREVIEW = wrappedFlag === 'preview' || wrappedFlag === '1';
-        const WRAPPED_FORCE_OPEN = wrappedFlag === '1';
-        // Which profile the show has already opened itself for this page load —
-        // '' before anyone picks a name, null for nobody yet.
-        let wrappedAutoPlayedFor = null;
+        const WRAPPED_PREVIEW = wrappedFlag === 'preview';
+        // Set by logging the last day of a year; the show opens once that log
+        // has landed and nothing else is on screen.
+        let wrappedPending = null;   // { year, uid }
         // Set while a log is being written, so the show can't open in the gap
         // between the data landing and the app finishing with that log.
         let wrappedHold = false;
@@ -2906,10 +2976,7 @@
                 onClose: ({ index, finished }) => {
                     // A mis-tap on the cover shouldn't burn the surprise, so it only
                     // counts as seen once she's a few slides in. A preview never counts.
-                    if (record && (finished || index >= 2)) {
-                        markWrappedSeen(n);
-                        renderWrappedBanner();
-                    }
+                    if (record && (finished || index >= 2)) markWrappedSeen(n);
                 },
                 onRecap: () => {
                     // Scroll to the section, not its contents, so the heading is
@@ -2942,84 +3009,20 @@
             });
         }
 
-        function renderWrappedBanner() {
-            const host = document.getElementById('wrapped-banner');
-            if (!host) return;
-            const n = latestWrappedYear();
-            if (n == null || (!WRAPPED_PREVIEW && wrappedSeen(n))) {
-                host.classList.add('hidden');
-                host.innerHTML = '';
-                return;
-            }
-            host.classList.remove('hidden');
-            host.innerHTML = `
-                <button type="button" class="wrapped-banner">
-                    <span class="wrapped-banner-gift">🎁</span>
-                    <span class="wrapped-banner-text">
-                        <span class="wrapped-banner-title">Your ${yearWord(n)} Wrapped is ready</span>
-                        <span class="wrapped-banner-sub">A look back at everywhere you both walked</span>
-                    </span>
-                    <span class="wrapped-banner-go">Play ▶</span>
-                </button>`;
-            host.querySelector('button').onclick = () => playWrapped(n);
+        // The year's last day is what opens the show: it runs once the log that
+        // finished the year has landed (so tonight's steps are in it), and after
+        // any milestone celebration from the same log has been closed.
+        function tryPendingWrapped() {
+            if (!wrappedPending || wrappedHold) return;
+            if (!modal.classList.contains('hidden')) return; // closing it calls back here
+            const { year, uid } = wrappedPending;
+            const last = finalDayOf(year);
+            const landed = logData.some(l => l.userId === uid && l.date && sameDay(l.date.toDate(), last));
+            if (!landed) return; // the next update brings it, and calls back here
+            wrappedPending = null;
+            if (!wrappedSeen(year)) playWrapped(year);
         }
-
-        // Installed on a phone, the app starts at `start_url` — which carries no
-        // query string and shows no address bar — so ?wrapped=preview can never
-        // reach it there. This is the way in from inside the app: a long press on
-        // the little grey line under the title. Obscure enough not to be found by
-        // accident, and it never marks the year as seen.
-        function setupWrappedPreviewGesture() {
-            const el = document.getElementById('header-subtitle');
-            if (!el) return;
-            // Stop the press turning into a text selection or an iOS callout.
-            el.style.webkitUserSelect = 'none';
-            el.style.userSelect = 'none';
-            el.style.webkitTouchCallout = 'none';
-            el.addEventListener('contextmenu', e => e.preventDefault());
-
-            let timer = null;
-            const cancel = () => { clearTimeout(timer); timer = null; };
-            el.addEventListener('pointerdown', () => {
-                cancel();
-                timer = setTimeout(() => {
-                    if (!logData.length) return;
-                    // After the gate this should still show the finished year, not
-                    // the one currently in progress.
-                    const done = openWrappedYears({ preview: false });
-                    const early = openWrappedYears({ preview: true });
-                    const n = done.length ? done[done.length - 1] : early[early.length - 1];
-                    if (n != null) playWrapped(n, { record: false });
-                }, 900);
-            });
-            ['pointerup', 'pointerleave', 'pointercancel'].forEach(e => el.addEventListener(e, cancel));
-        }
-
-        // The first visit after the gate opens plays on its own — but it opens on
-        // the cover slide, which waits for a tap, so nothing runs before she's
-        // actually looking at it.
-        function maybeAutoPlayWrapped() {
-            // Latched per person rather than per page load: on a shared phone the
-            // second one to log has finished their own year, and that is a fresh
-            // reason to open, not a repeat of the first.
-            if (wrappedHold) return;
-            const who = currentUser || '';
-            if (wrappedAutoPlayedFor === who) return;
-            // Wait for real data: opening against an empty snapshot would show a
-            // year in which nobody walked anywhere.
-            if (!logData.length) return;
-            const n = latestWrappedYear();
-            // Nothing to open yet — but don't latch, because the year can finish
-            // while the app is sitting open. That is the whole point on the last
-            // night: the log that completes the year arrives as an ordinary
-            // update, and this runs again on the back of it.
-            if (n == null) return;
-            // A milestone on the same log puts a modal up first. Let it have the
-            // screen; closing it calls back here.
-            if (!modal.classList.contains('hidden')) return;
-            wrappedAutoPlayedFor = who;
-            if (WRAPPED_FORCE_OPEN || (!WRAPPED_PREVIEW && !wrappedSeen(n))) playWrapped(n);
-        }
+        const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
         // Move updateUI definition before main calls it
         function updateUI() {
@@ -3038,9 +3041,8 @@
             renderTrips();
             renderMap();
             renderWorld();
-            renderWrappedBanner();
             renderWrappedRecap();
-            maybeAutoPlayWrapped();
+            tryPendingWrapped();
         }
 
         // --- 🍂 Seasons ---
@@ -3321,7 +3323,6 @@
             initializeMap();
             setupUserSelector();
             setupStatsFilter();
-            setupWrappedPreviewGesture();
             stepForm.addEventListener('submit', handleStepSubmit);
 
             // --- Real-time Listeners ---
@@ -3334,7 +3335,9 @@
                 updateUI();
             });
             onSnapshot(tripsDocRef, (d) => {
-                tripNames = (d.exists() && d.data().names) || {};
+                const data = (d.exists() && d.data()) || {};
+                tripNames = data.names || {};
+                tripEdits = { custom: Array.isArray(data.custom) ? data.custom : [], hidden: Array.isArray(data.hidden) ? data.hidden : [] };
                 renderTrips();
             });
             const logsQuery = query(logsCollectionRef, orderBy("date", "desc"));

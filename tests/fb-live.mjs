@@ -57,11 +57,13 @@ const snapDoc = (ref) => {
   return { id: ref.id, ref, exists: () => data !== undefined, data: () => (data === undefined ? undefined : { ...data }) };
 };
 
-function fire(path) {
+// Like the real thing: a collection listener hears every change in it, a
+// document listener only changes to its own document.
+function fire(path, ids) {
   state.subs.forEach((s) => {
     if (s.path !== path) return;
     if (s.id == null) s.cb(snapCol(path));
-    else s.cb(snapDoc({ col: path, id: s.id }));
+    else if (!ids || ids.has(s.id)) s.cb(snapDoc({ col: path, id: s.id }));
   });
 }
 
@@ -116,9 +118,9 @@ export function doc(parent, ...segs) {
   return { col, id };
 }
 export const getDoc = async (r) => snapDoc(r);
-export const setDoc = async (r, data, opts) => { maybeFail(); write(r, data, opts && opts.merge ? 'merge' : 'set'); fire(r.col); };
-export const updateDoc = async (r, data) => { maybeFail(); write(r, data, 'update'); fire(r.col); };
-export const deleteDoc = async (r) => { maybeFail(); write(r, null, 'delete'); fire(r.col); };
+export const setDoc = async (r, data, opts) => { maybeFail(); write(r, data, opts && opts.merge ? 'merge' : 'set'); fire(r.col, new Set([r.id])); };
+export const updateDoc = async (r, data) => { maybeFail(); write(r, data, 'update'); fire(r.col, new Set([r.id])); };
+export const deleteDoc = async (r) => { maybeFail(); write(r, null, 'delete'); fire(r.col, new Set([r.id])); };
 
 export async function runTransaction(_db, fn) {
   maybeFail();
@@ -130,9 +132,9 @@ export async function runTransaction(_db, fn) {
     delete: (r) => { ops.push([r, null, 'delete']); return t; }
   };
   const result = await fn(t);
-  const touched = new Set();
-  ops.forEach(([r, d, mode]) => { write(r, d, mode); touched.add(r.col); });
-  touched.forEach(fire);
+  const touched = new Map();
+  ops.forEach(([r, d, mode]) => { write(r, d, mode); if (!touched.has(r.col)) touched.set(r.col, new Set()); touched.get(r.col).add(r.id); });
+  touched.forEach((ids, col) => fire(col, ids));
   return result;
 }
 

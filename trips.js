@@ -5,11 +5,17 @@
 //
 // A trip only counts if you were both there. A day is "together-away" when
 // both of you logged a location more than TRIP_KM from home and those places
-// are within TOGETHER_KM of each other. A solo work trip never becomes a card.
+// are near each other: within TOGETHER_KM close to home, or within 5% of the
+// distance once you're far away (a day trip to the Grand Canyon from the Vegas
+// Strip is 200 km, and still the same trip). A solo work trip never becomes a
+// card.
 
 import { HOME, TRIP_KM, haversineKm } from './wrapped.js';
 
 export const TOGETHER_KM = 50;
+export const TOGETHER_FRACTION = 0.05;
+/** How far apart two places can be and still count as together, this far from home. */
+export const togetherLimit = (kmA, kmB) => Math.max(TOGETHER_KM, TOGETHER_FRACTION * Math.min(kmA, kmB));
 // A one-day trip has to be properly far: a day out in Liverpool isn't a trip.
 export const MIN_FAR_KM = 100;
 // A day where only one of you tagged a place can join the edge of a trip (the
@@ -67,11 +73,14 @@ export function dayStates(logs, { home = HOME, tripKm = TRIP_KM } = {}) {
     days.forEach((d) => {
         const a = d.user1, b = d.user2;
         if (a.state === 'away' && b.state === 'away') {
-            d.kind = haversineKm(a.point, b.point) <= TOGETHER_KM ? 'together' : 'apart';
+            d.kind = haversineKm(a.point, b.point) <= togetherLimit(a.km, b.km) ? 'together' : 'apart';
         } else if ((a.state === 'away' && b.state === 'home') || (b.state === 'away' && a.state === 'home')) {
             d.kind = 'solo';
         } else if (a.state === 'away' || b.state === 'away') {
             d.kind = 'half';   // one away, the other tagged nowhere
+            // ('apart' days — both away, far from each other — are travel days at
+            // the ends of a trip: one of you at Heathrow, the other already at
+            // the other end. They can join a trip, never start one.)
         } else if (a.state === 'home' || b.state === 'home') {
             d.kind = 'home';
         } else {
@@ -91,40 +100,42 @@ export function findTrips(logs, { home = HOME, tripKm = TRIP_KM, minFarKm = MIN_
     const keys = [...days.keys()].sort();
     const kind = (k) => (days.has(k) ? days.get(k).kind : 'blank');
     const runs = [];
-    const isTripDay = (k) => kind(k) === 'together' || kind(k) === 'half';
 
-    // A one-of-you-tagged day at the edge of a trip (the airport on the way out
-    // or back) joins it only if it's near where the trip was.
+    // A day only one of you tagged, or a day you were both away but apart (the
+    // airports at either end), joins a trip only if it's near where the trip
+    // was: one of its places within EDGE_KM of a together day so far.
     const nearTrip = (k, run) => {
         const d = days.get(k);
-        const p = (d.user1.state === 'away' ? d.user1 : d.user2).point;
-        return run.filter((x) => kind(x) === 'together')
-            .some((x) => [days.get(x).user1.point, days.get(x).user2.point].some((q) => haversineKm(p, q) <= EDGE_KM));
+        if (!d) return false;
+        const here = [d.user1, d.user2].filter((u) => u.state === 'away').map((u) => u.point);
+        const trip = run.filter((x) => kind(x) === 'together').flatMap((x) => [days.get(x).user1.point, days.get(x).user2.point]);
+        return here.some((p) => trip.some((q) => haversineKm(p, q) <= EDGE_KM));
     };
+    const joins = (k, run) => kind(k) === 'together' || ((kind(k) === 'half' || kind(k) === 'apart') && nearTrip(k, run));
 
     let i = 0;
     while (i < keys.length) {
         if (kind(keys[i]) !== 'together') { i++; continue; }
-        // Walk forward through the calendar: together days, days only one of you
-        // tagged, and single days nobody tagged all carry a trip on. A day that
-        // shows either of you at home, or the two of you apart, ends it.
+        // Walk forward through the calendar: together days, days that join, and
+        // single days nobody tagged all carry a trip on. A day that shows either
+        // of you at home, or one that doesn't join, ends it.
         const run = [keys[i]];
         let cur = keys[i];
         for (;;) {
             const n1 = nextKey(cur);
-            if (isTripDay(n1)) { run.push(n1); cur = n1; continue; }
-            if (kind(n1) === 'blank' && isTripDay(nextKey(n1))) { run.push(n1, nextKey(n1)); cur = nextKey(n1); continue; }
+            if (joins(n1, run)) { run.push(n1); cur = n1; continue; }
+            if (kind(n1) === 'blank' && joins(nextKey(n1), run)) { run.push(n1, nextKey(n1)); cur = nextKey(n1); continue; }
             break;
         }
-        // Whatever follows the last together day is only kept if it's a single
-        // tagged day near the trip — a trip can't trail off into a solo one.
+        // Whatever follows the last together day is only kept if it's one day
+        // that joins — a trip can't trail off into a solo one.
         let last = run.length - 1;
         while (kind(run[last]) !== 'together') last--;
         const tail = run.splice(last + 1);
-        if (tail.length && kind(tail[0]) === 'half' && nearTrip(tail[0], run)) run.push(tail[0]);
-        // And one such day before it.
+        if (tail.length && kind(tail[0]) !== 'blank') run.push(tail[0]);
+        // And one such day before it: the way out.
         const before = (() => { const d = fromKey(run[0]); d.setDate(d.getDate() - 1); return dayKey(d); })();
-        if (kind(before) === 'half' && nearTrip(before, run)) run.unshift(before);
+        if ((kind(before) === 'half' || kind(before) === 'apart') && nearTrip(before, run)) run.unshift(before);
 
         runs.push(run);
         const end = run[run.length - 1];
@@ -192,6 +203,34 @@ function build(run, days, home) {
         centre,
         coverPhoto
     };
+}
+
+/**
+ * A trip covering exactly the dates given — for when the automatic dates are
+ * wrong and you've set them yourself. Every log in the range counts, tagged or
+ * not.
+ */
+export function tripFromRange(logs, startKey, endKey, { home = HOME, tripKm = TRIP_KM } = {}) {
+    const days = dayStates(logs, { home, tripKm });
+    const run = [];
+    for (let k = startKey; k <= endKey && run.length < 366; k = nextKey(k)) run.push(k);
+    return { ...build(run, days, home), manual: true };
+}
+
+/**
+ * Apply the edits you've made: trips you've set the dates for yourself replace
+ * any automatic trip they overlap, and trips you've said aren't trips go.
+ *   edits = { custom: [{ start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }], hidden: ['YYYY-MM-DD'] }
+ * A hidden key matches any day of an automatic trip, so it holds even if a
+ * backdated log moves the trip's first day.
+ */
+export function applyTripEdits(autoTrips, logs, edits = {}, opts = {}) {
+    const custom = (edits.custom || []).filter((r) => r && r.start && r.end && r.start <= r.end);
+    const hidden = new Set(edits.hidden || []);
+    const manual = custom.map((r) => tripFromRange(logs, r.start, r.end, opts));
+    const overlaps = (t) => custom.some((r) => t.dayKeys[0] <= r.end && t.dayKeys[t.dayKeys.length - 1] >= r.start);
+    const auto = autoTrips.filter((t) => !overlaps(t) && !t.dayKeys.some((k) => hidden.has(k)));
+    return [...manual, ...auto].sort((a, b) => b.start - a.start);
 }
 
 /**
