@@ -1,8 +1,11 @@
-// Exercise days — the runs, badminton, pilates and dancing alongside the steps.
+// Exercise — the runs, badminton, pilates, dancing and long walks alongside the
+// steps.
 //
 // Pure: no DOM, no Firebase. A log carries an optional `exercise` list of
 // activity ids (and `exerciseOther` when one of them is 'other'). Nothing here
-// adds steps or scores anything: it only counts days.
+// adds steps or scores anything. It counts exercises: a run and a game of
+// badminton on the same day are two. The same activity logged twice in a day
+// is still one.
 
 import { challengeYearStart, challengeYearAt } from './wrapped.js';
 
@@ -13,6 +16,8 @@ export const ACTIVITIES = [
     { id: 'cycling',   emoji: '🚴', label: 'Cycling' },
     { id: 'pilates',   emoji: '🧘', label: 'Pilates' },
     { id: 'dancing',   emoji: '💃', label: 'Dancing' },
+    // An hour or more out walking, on purpose, rather than the steps of a day.
+    { id: 'walk',      emoji: '🥾', label: 'Long walk' },
     { id: 'other',     emoji: '✨', label: 'Other' }
 ];
 const BY_ID = new Map(ACTIVITIES.map((a) => [a.id, a]));
@@ -90,30 +95,31 @@ export function periodStarts(now = new Date()) {
     return { week, month, year };
 }
 
+// Counts of each activity over a set of days, most-done first. Ties keep the
+// order of ACTIVITIES, so the list doesn't shuffle on re-render.
+function tally(days) {
+    const t = new Map();
+    days.forEach((ids) => ids.forEach((id) => t.set(id, (t.get(id) || 0) + 1)));
+    return [...t.entries()]
+        .map(([id, count]) => ({ ...activityFor(id), count }))
+        .sort((a, b) => b.count - a.count || ACTIVITIES.indexOf(BY_ID.get(a.id)) - ACTIVITIES.indexOf(BY_ID.get(b.id)));
+}
+const exercises = (days) => [...days.values()].reduce((n, ids) => n + ids.length, 0);
+
 /**
- * Everything the Active days card shows for one person: day counts for the
- * week, month and challenge year so far, and their activities over the year,
- * most-done first (counted in days, not sessions).
+ * The Active days card for one person: how many exercises this week, this
+ * month and this challenge year so far.
  */
 export function activitySummary(logs, uid, now = new Date()) {
     const { week, month, year } = periodStarts(now);
     const end = new Date(startOfDay(now).getTime() + 86400000);
-    const yearDays = activityDays(logs, uid, year, end);
-    const count = (from) => [...yearDays.keys()].filter((k) => k >= dayKey(from)).length;
+    const since = (from) => activityDays(logs, uid, from < year ? year : from, end);
+    return { week: exercises(since(week)), month: exercises(since(month)), year: exercises(since(year)) };
+}
 
-    const tally = new Map();
-    yearDays.forEach((ids) => ids.forEach((id) => tally.set(id, (tally.get(id) || 0) + 1)));
-    const byActivity = [...tally.entries()]
-        .map(([id, days]) => ({ ...activityFor(id), days }))
-        // Ties keep the order of ACTIVITIES, so the list doesn't shuffle on re-render.
-        .sort((a, b) => b.days - a.days || ACTIVITIES.indexOf(BY_ID.get(a.id)) - ACTIVITIES.indexOf(BY_ID.get(b.id)));
-
-    return {
-        week: dayKey(week) < dayKey(year) ? count(year) : count(week),
-        month: dayKey(month) < dayKey(year) ? count(year) : count(month),
-        year: yearDays.size,
-        byActivity
-    };
+/** Each activity's count in one calendar month (month 0–11), most-done first. */
+export function monthActivities(logs, uid, y, m) {
+    return tally(activityDays(logs, uid, new Date(y, m, 1), new Date(y, m + 1, 1)));
 }
 
 /** Has anyone ever ticked exercise? The card stays out of the way until then. */

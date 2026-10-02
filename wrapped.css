@@ -588,7 +588,6 @@ body.wrapped-lock { overflow: hidden; }
     cursor: pointer;
 }
 .recap-toggle:hover { color: #374151; }
-.recap-foot { font-size: 10px; color: #9ca3af; text-align: center; margin-top: 8px; }
 
 /* --- the year as a grid --------------------------------------------------- */
 /* Twelve rows and thirty-one columns. GitHub's 53-column layout does not fit a
@@ -773,3 +772,6 @@ body.wrapped-lock { overflow: hidden; }
     /* Room on both sides: the signature should not look like a button label. */
     margin: 16px auto 14px;
 }
+
+/* Inside Show more, under the four tiles. */
+.recap-more .recap-play { margin: 14px 0 4px; }

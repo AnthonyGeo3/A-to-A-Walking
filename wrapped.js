@@ -2346,9 +2346,9 @@ export function recapHtml(stats) {
         </div>`;
 
     return `
-        <button type="button" class="recap-play">▶ Play ${esc(yearWord(stats.year))} Wrapped</button>
         ${tiles}
         <div class="recap-more" hidden>
+            <button type="button" class="recap-play">▶ Play ${esc(yearWord(stats.year))} Wrapped</button>
             <h4 class="recap-h">The year, day by day</h4>
             ${yearHeatmapHtml(stats)}
 
@@ -2366,8 +2366,7 @@ export function recapHtml(stats) {
             ${stamps}
             ${awards}
         </div>
-        <button type="button" class="recap-toggle">Show more ▼</button>
-        <p class="recap-foot">Figures are live — a walk logged late still lands in the year it belongs to.</p>`;
+        <button type="button" class="recap-toggle">Show more ▼</button>`;
 }
 
 /**
