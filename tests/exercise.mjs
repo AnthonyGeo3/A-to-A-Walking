@@ -33,7 +33,8 @@ c.check('a log without the tick has no exercise field at all', l.steps === 9100 
 await page.fill('#step-input', '11200');
 await page.click('#exercise-toggle');
 c.check('the chips open', await page.isVisible('#exercise-form-picker .exercise-chips'));
-c.check('all six activities', (await page.$$('#exercise-form-picker .exercise-chip')).length === 6);
+c.check('all seven activities, Long walk included', (await page.$$('#exercise-form-picker .exercise-chip')).length === 7
+  && (await page.textContent('#exercise-form-picker')).includes('🥾 Long walk'));
 const addBox = await page.locator('#step-form button[type="submit"]').boundingBox();
 c.check('Add stays on screen with the chips open', addBox && addBox.y + addBox.height < 844, addBox && Math.round(addBox.y));
 await page.click('#exercise-form-picker [data-activity="running"]');
@@ -66,10 +67,26 @@ c.check('the name is kept', l.exerciseOther === 'Climbing' && JSON.stringify(l.e
 
 // --- the card ---
 c.check('the card appears once someone has ticked', await page.isVisible('#active-days'));
-const card = (await page.textContent('#active-days')).replace(/\s+/g, ' ');
-// Ant: three logs today, two with exercise → 1 day.
-c.check('a day with two exercise logs counts once', /Ant 1 this week 1 this month · 1 this year/.test(card), card);
-c.check('it never reads as a fraction of the week', !/\/\s*7/.test(card));
+// One column each, Ant on the left: no names needed.
+// Line one reads as "3 this week · 3 this month · 3 this year" whichever way it's laid out.
+const cols = () => page.$$eval('#active-days .grid > div', (n) => n.map((x) => [...x.querySelectorAll('p')].map((p, i) => i === 0
+  ? [...p.querySelectorAll('.active-days-fig')].map((f) => f.textContent.replace(/\s+/g, ' ').replace(/^(\d+)/, '$1 ').replace(/\s+/g, ' ').trim()).join(' · ')
+  : p.textContent.replace(/\s+/g, ' ').trim())));
+// …and actually on one line: the three figures share a row.
+const oneRow = () => page.$$eval('#active-days .active-days-line', (n) => n.every((p) => new Set([...p.querySelectorAll('.active-days-fig')].map((f) => Math.round(f.getBoundingClientRect().top))).size === 1));
+let card = await cols();
+c.check('two lines each, and no names', card.length === 2 && card.every((col) => col.length === 2) && !/Ant|Amy/.test(JSON.stringify(card)), JSON.stringify(card));
+// Ant today: running and badminton on one log, Other on another → three exercises.
+c.check('exercises are counted, not days: run + badminton + other is 3', card[0][0] === '3 this week · 3 this month · 3 this year', card[0][0]);
+c.check('each activity with its count', card[0][1] === '🏃 1 · 🏸 1 · ✨ 1', card[0][1]);
+c.check('the three figures sit on one line', await oneRow());
+c.check('and stay inside their own half', await page.$$eval('#active-days .grid > div', (n) => n.every((col) => {
+  const r = col.getBoundingClientRect();
+  return [...col.querySelectorAll('.active-days-fig')].every((f) => { const b = f.getBoundingClientRect(); return b.left >= r.left - 1 && b.right <= r.right + 1; });
+})));
+c.check('Amy on the right', card[1][0] === '1 this week · 1 this month · 1 this year' && card[1][1] === '✨ 1', JSON.stringify(card[1]));
+c.check('in your colours', await page.$eval('#active-days .grid > div:first-child strong', (e) => getComputedStyle(e).color) === 'rgb(21, 128, 61)');
+c.check('it never reads as a fraction of the week', !/\/\s*7/.test(JSON.stringify(card)));
 
 // --- backfilling an old log ---
 const oldId = await page.evaluate(() => {
@@ -82,9 +99,8 @@ await page.click('#modal-confirm');
 await page.waitForTimeout(300);
 l = (await stored(page)).find((x) => x.id === oldId);
 c.check('backfilling through 💪 saves it', JSON.stringify(l.exercise) === '["pilates"]', JSON.stringify(l.exercise));
-const card2 = (await page.textContent('#active-days')).replace(/\s+/g, ' ');
-c.check('and the card counts it straight away', /Amy \d+ this week \d+ this month · 2 this year/.test(card2), card2);
-c.check('top activities are listed', card2.includes('🧘 1'));
+card = await cols();
+c.check('and the card counts it straight away', /· 2 this month · 2 this year$/.test(card[1][0]) && card[1][1].includes('🧘 1'), JSON.stringify(card[1]));
 
 // Clearing it again.
 await page.click(`#user2-log .edit-exercise[data-id="${oldId}"]`);
@@ -93,6 +109,15 @@ await page.click('#modal-confirm');
 await page.waitForTimeout(300);
 l = (await stored(page)).find((x) => x.id === oldId);
 c.check('picking nothing in the editor clears it', Array.isArray(l.exercise) && l.exercise.length === 0);
+
+// --- the counters follow the Stats dropdown ---
+await page.selectOption('#stats-filter', '2026-8').catch(() => {});
+await page.waitForTimeout(200);
+card = await cols();
+c.check('looking at September, the counters show September', await page.inputValue('#stats-filter') === '2026-8' && /^— in Sept?$/.test(card[0][1]), JSON.stringify(card));
+c.check('while this week, month and year stay put', card[0][0] === '3 this week · 3 this month · 3 this year');
+await page.selectOption('#stats-filter', 'all');
+await page.waitForTimeout(200);
 
 // --- the heatmap dot ---
 const dots = await page.evaluate(() => [...document.querySelectorAll('#heatmap-container .heatmap-cell.has-moved')]

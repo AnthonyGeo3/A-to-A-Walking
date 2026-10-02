@@ -25,7 +25,9 @@ try {
   const clear = async () => { if (await overlay(page)) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); } };
   await clear();
   c.check('there is no "ready" banner', !await page.$('#wrapped-banner') && !/Wrapped is ready/.test(await page.textContent('body')));
-  c.check('the Recap is at the bottom with its Play button', await page.isVisible('#wrapped-recap-section .recap-play'));
+  c.check('the Recap is at the bottom', await page.isVisible('#wrapped-recap-section .recap-tiles'));
+  c.check('its Play button is tucked away in Show more', !await page.isVisible('#wrapped-recap-section .recap-play'));
+  c.check('and the "figures are live" line is gone', !/Figures are live/.test(await page.textContent('#wrapped-recap-section')));
   await page.reload(); await page.waitForTimeout(500);
   c.check('nor on a second load', !await overlay(page));
   await clear();
@@ -38,6 +40,8 @@ try {
   await logSteps(page, 'Amy', 9000);
   c.check('logging an ordinary day does not open it', !await overlay(page));
   // Play does.
+  await page.click('#wrapped-recap-section .recap-toggle');
+  c.check('Show more reveals Play', await page.isVisible('#wrapped-recap-section .recap-play'));
   await page.click('#wrapped-recap-section .recap-play');
   await page.waitForTimeout(300);
   c.check('the Recap Play button opens it', await overlay(page));
@@ -75,7 +79,7 @@ try {
   await page.waitForTimeout(500);
   c.check('closed on the cover and reloaded, it still never opens on load', !await overlay(page));
   await page.click('#user-selector button:has-text("Amy")');
-  c.check('but Play in the Recap is there for it once she picks her name', await page.isVisible('#wrapped-recap-section .recap-play'));
+  c.check('but the Recap is there for it once she picks her name', await page.isVisible('#wrapped-recap-section .recap-tiles'));
   await page.click('#user-selector button:has-text("Ant")');
   c.check('and not for the one who has not logged the last day yet', !await page.isVisible('#wrapped-recap-section'));
   await page.context().close();

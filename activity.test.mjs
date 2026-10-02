@@ -1,7 +1,7 @@
 // Tests for exercise days.   node --test activity.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVITIES, activityFor, logActivities, describe, activityDays, activitySummary,
+import { ACTIVITIES, activityFor, logActivities, describe, activityDays, activitySummary, monthActivities,
          periodStarts, anyExercise, exerciseFromPicker, otherLabelsOn } from './activity.js';
 
 const D = (y, m, d, hh = 21) => new Date(y, m - 1, d, hh, 0);
@@ -10,7 +10,8 @@ const log = (userId, date, exercise, extra = {}) => ({ id: Math.random().toStrin
 const ts = (d) => ({ toDate: () => d, toMillis: () => d.getTime() });
 
 test('the activity list', () => {
-    assert.deepEqual(ACTIVITIES.map((a) => a.id), ['running', 'badminton', 'cycling', 'pilates', 'dancing', 'other']);
+    assert.deepEqual(ACTIVITIES.map((a) => a.id), ['running', 'badminton', 'cycling', 'pilates', 'dancing', 'walk', 'other']);
+    assert.equal(activityFor('walk').label, 'Long walk');
     assert.equal(activityFor('running').emoji, '🏃');
     assert.equal(activityFor('swimming').id, 'other', 'an unknown id shows as Other');
 });
@@ -47,21 +48,33 @@ test('weeks start on Monday, like the head-to-head bar', () => {
     assert.equal(month.getDate(), 1);
 });
 
-test('the summary counts days in the week, month and challenge year', () => {
+test('the summary counts exercises in the week, month and challenge year', () => {
     const now = D(2026, 10, 14, 22); // Wed
     const logs = [
         log('user1', D(2026, 9, 28), ['running']),   // last challenge year
         log('user1', D(2026, 10, 2), ['running']),   // this month, last week
         log('user1', D(2026, 10, 12), ['badminton']),// this week (Mon)
-        log('user1', D(2026, 10, 14), ['badminton', 'running']), // today
+        log('user1', D(2026, 10, 14), ['badminton', 'running']), // today: two exercises
+        log('user1', D(2026, 10, 14, 8), ['running']),           // a second run today is still one
         log('user1', D(2026, 10, 13)),               // a rest day
     ];
     const s = activitySummary(logs, 'user1', now);
-    assert.equal(s.week, 2);
-    assert.equal(s.month, 3);
-    assert.equal(s.year, 3, 'September belongs to Year 1');
-    // Running and badminton both on 2 days; ties keep the list order.
-    assert.deepEqual(s.byActivity.map((a) => [a.id, a.days]), [['running', 2], ['badminton', 2]]);
+    assert.equal(s.week, 3, 'Monday badminton, and badminton and a run today');
+    assert.equal(s.month, 4);
+    assert.equal(s.year, 4, 'September belongs to Year 1');
+});
+
+test('each activity counted for a month, most-done first', () => {
+    const logs = [
+        log('user1', D(2026, 9, 30), ['running']),   // September: not October
+        log('user1', D(2026, 10, 2), ['running']),
+        log('user1', D(2026, 10, 12), ['badminton']),
+        log('user1', D(2026, 10, 14), ['badminton', 'walk']),
+        log('user1', D(2026, 11, 1), ['running'])    // November: not October
+    ];
+    assert.deepEqual(monthActivities(logs, 'user1', 2026, 9).map((a) => [a.id, a.count]), [['badminton', 2], ['running', 1], ['walk', 1]]);
+    assert.deepEqual(monthActivities(logs, 'user1', 2026, 8).map((a) => [a.id, a.count]), [['running', 1]]);
+    assert.deepEqual(monthActivities(logs, 'user2', 2026, 9), []);
 });
 
 test('a week that started in the old year only counts from 1 October', () => {

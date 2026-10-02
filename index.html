@@ -355,8 +355,10 @@
             width: 6px; height: 6px; border-radius: 50%;
             background: #fff; box-shadow: 0 0 0 1.5px var(--moved-ring, #9ca3af);
         }
-        .active-days-name { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
-        .active-days-big { font-size: 22px; font-weight: 900; line-height: 1.1; font-variant-numeric: tabular-nums; }
+        .active-days-line { display: flex; justify-content: center; gap: 7px; }
+        .active-days-fig { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+        .active-days-fig strong { font-size: 18px; font-weight: 900; line-height: 1.1; font-variant-numeric: tabular-nums; }
+        .active-days-fig span { font-size: 10px; color: #9ca3af; white-space: nowrap; }
 
         /* --- Trips --- */
         .trips-row {
@@ -696,7 +698,7 @@
         import { placeStamps, positionFor, ringSegments } from './journey.js';
         import { findTrips, dayStates, storedName, tripDates, flagEmoji, applyTripEdits } from './trips.js';
         import { ACTIVITIES, activityFor, logActivities, describe as describeActivities, activityDays,
-                 activitySummary, anyExercise, exerciseFromPicker } from './activity.js';
+                 activitySummary, monthActivities, anyExercise, exerciseFromPicker } from './activity.js';
 
         // --- ⚙️ CHALLENGE DATA ---
         const USER_1_NAME = "Ant";
@@ -1573,11 +1575,11 @@
         }
 
         let heatmapMonthName = '';
-        function renderHeatmap() {
-            const container = document.getElementById('heatmap-container');
+        // The month the Stats dropdown is looking at — the heatmap's month, and the
+        // one the exercise counters show.
+        function statsMonth() {
             const filterValue = document.getElementById('stats-filter').value;
             const today = new Date();
-
             let year, month;
             if (filterValue === 'all') {
                 year = today.getFullYear();
@@ -1598,6 +1600,13 @@
                 year = parseInt(parts[0]);
                 month = parseInt(parts[1]);
             }
+            return { year, month };
+        }
+
+        function renderHeatmap() {
+            const container = document.getElementById('heatmap-container');
+            const today = new Date();
+            const { year, month } = statsMonth();
 
             // Build per-day step totals for each user
             const dayTotals = { user1: {}, user2: {} };
@@ -2504,23 +2513,29 @@
             if (!host) return;
             if (!anyExercise(logData)) { host.classList.add('hidden'); host.innerHTML = ''; return; }
             host.classList.remove('hidden');
+            // The counters follow the Stats dropdown, like the heatmap below them.
+            const { year, month } = statsMonth();
+            const now = new Date();
+            const otherMonth = year !== now.getFullYear() || month !== now.getMonth();
+            const monthName = new Date(year, month, 1).toLocaleDateString('en-GB', { month: 'short' });
+            // No names: Ant is always on the left in green, Amy on the right in purple.
             const col = (uid) => {
-                const s = activitySummary(logData, uid, new Date());
+                const s = activitySummary(logData, uid, now);
                 const ink = uid === 'user1' ? '#15803d' : '#7e22ce';
-                const top = s.byActivity.slice(0, 3)
-                    .map(a => `<span title="${a.label}">${a.emoji} ${a.days}</span>`).join('<span class="text-gray-300"> · </span>');
+                const counts = monthActivities(logData, uid, year, month)
+                    .map(a => `<span class="whitespace-nowrap" title="${a.label}">${a.emoji} ${a.count}</span>`).join('<span class="text-gray-300"> · </span>');
+                // Three small figures side by side: "3 this week · 5 this month ·
+                // 12 this year" written out doesn't fit half a phone on one line.
+                const fig = (v, label) => `<span class="active-days-fig"><strong style="color:${ink}">${v}</strong><span>${label}</span></span>`;
                 return `
                     <div class="text-center">
-                        <p class="active-days-name" style="color:${ink}">${userData[uid].name}</p>
-                        <p class="active-days-big" style="color:${ink}">${s.week}</p>
-                        <p class="text-[11px] text-gray-500">this week</p>
-                        <p class="text-[11px] text-gray-500 mt-1">${s.month} this month · ${s.year} this year</p>
-                        ${top ? `<p class="text-xs text-gray-600 mt-1">${top}</p>` : ''}
+                        <p class="active-days-line">${fig(s.week, 'this week')}${fig(s.month, 'this month')}${fig(s.year, 'this year')}</p>
+                        <p class="text-xs text-gray-600 mt-1">${counts || '<span class="text-gray-300">—</span>'}${otherMonth ? `<span class="text-gray-400"> in ${monthName}</span>` : ''}</p>
                     </div>`;
             };
             host.innerHTML = `
                 <h3 class="text-sm font-bold text-gray-700 text-center mb-2">💪 Active days</h3>
-                <div class="grid grid-cols-2 gap-4">${col('user1')}${col('user2')}</div>`;
+                <div class="grid grid-cols-2 gap-6">${col('user1')}${col('user2')}</div>`;
         }
 
         // --- Interaction ---
