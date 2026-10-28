@@ -2,9 +2,12 @@ rules_version = '2';
 
 // A to A Walking: who can do what in the database.
 //
-// To use: Firebase console → Firestore Database → Rules. Replace everything
-// there with this file, put your two User UIDs (Authentication → Users) in
-// place of ANT_UID and AMY_UID, and press Publish.
+// To use: Firebase console → Firestore Database → Rules. Put your two User UIDs
+// (Authentication → Users) in place of ANT_UID and AMY_UID. If this Firebase
+// project is only used by this app, replace everything there with this file.
+// If other apps share it, keep their rules as they are and swap in just the
+// two blocks below for this app's old open rule, or they will be locked out.
+// Then press Publish.
 //
 // Anyone can look at steps, places, goals and trips; that's the page you can
 // share. Only the two of you can change anything, and only you two can see

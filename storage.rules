@@ -2,8 +2,10 @@ rules_version = '2';
 
 // A to A Walking: who can do what with the photos.
 //
-// To use: Firebase console → Storage → Rules. Replace everything there with
-// this file, put in the same two User UIDs as firestore.rules, and Publish.
+// To use: Firebase console → Storage → Rules. Put in the same two User UIDs as
+// firestore.rules. If this app is the only thing using Storage, replace
+// everything there with this file; if other apps use it too, keep their rules
+// and swap in just the photos block below. Then Publish.
 //
 // Only the two of you can add or remove photos. The app shows them through
 // the links saved with your notes, which only you two can read.
