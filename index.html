@@ -369,6 +369,8 @@
             border: 1px solid #e5e7eb; border-radius: 8px; text-align: center; }
         .log-exercise { margin-left: 4px; letter-spacing: 1px; white-space: nowrap; }
         .log-exercise-empty { opacity: 0.28; filter: grayscale(1); font-size: 11px; }
+        /* Not signed in: nothing to log with. */
+        body.read-only #user-selector, body.read-only #step-form { display: none !important; }
         /* A day you exercised on the month heatmap: a white dot ringed in your
            colour, so it shows on an empty cell and on your darkest day alike. */
         .heatmap-cell.has-moved::after {
@@ -522,7 +524,7 @@
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="text-gray-800 flex items-center justify-center min-h-screen p-2 sm:p-4">
+<body class="read-only text-gray-800 flex items-center justify-center min-h-screen p-2 sm:p-4">
 
     <div class="w-full max-w-3xl mx-auto main-container rounded-2xl overflow-hidden">
 
@@ -537,6 +539,19 @@
         <!-- Input Section -->
         <div class="p-4 rounded-xl mb-8" style="background: linear-gradient(135deg, #f0fdf4 0%, #faf5ff 100%); border: 1px solid rgba(0,0,0,0.05);">
             <h2 class="text-lg font-semibold text-center mb-3">Log Steps</h2>
+            <!-- Not signed in: everything is there to look at, nothing to change. -->
+            <div id="view-only" class="hidden text-center">
+                <p id="view-only-text" class="text-sm text-gray-500">👀 View only</p>
+                <button type="button" id="sign-in-open" class="mt-1 text-sm font-semibold text-gray-600 underline underline-offset-2 py-1 px-2">Sign in</button>
+                <form id="sign-in-form" class="hidden mt-2 flex flex-col items-center gap-2 w-full">
+                    <input type="email" id="sign-in-email" autocomplete="username" inputmode="email" placeholder="Email" required
+                           class="w-full max-w-xs p-2 border rounded-lg text-base">
+                    <input type="password" id="sign-in-password" autocomplete="current-password" placeholder="Password" required
+                           class="w-full max-w-xs p-2 border rounded-lg text-base">
+                    <button type="submit" class="bg-gray-700 text-white font-bold py-2 px-6 rounded-lg text-sm">Sign in</button>
+                    <p id="sign-in-error" class="text-xs text-red-600 min-h-[1rem]" role="alert"></p>
+                </form>
+            </div>
             <div class="flex justify-center gap-4 mb-3" id="user-selector"></div>
             <form id="step-form" class="hidden flex flex-col items-center justify-center gap-3 w-full">
                 <div class="flex items-center gap-2">
@@ -670,6 +685,13 @@
             <h2 id="wrapped-recap-heading" class="text-xl font-bold text-center mb-4">📖 Recap</h2>
             <div id="wrapped-recap"></div>
         </div>
+
+        <!-- Only once you're signed in -->
+        <div id="account-bar" class="hidden text-center text-xs text-gray-400 pb-2">
+            Signed in ·
+            <button type="button" id="backup-btn" class="underline underline-offset-2 py-1">Download backup</button> ·
+            <button type="button" id="sign-out-btn" class="underline underline-offset-2 py-1">Sign out</button>
+        </div>
         </div><!-- close padding wrapper -->
     </div>
 
@@ -710,8 +732,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy, Timestamp, runTransaction, writeBatch, deleteField } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
         import { computeWrapped, openWrapped, wrappedYears, yearWord, mountRecap,
                  hasLoggedFinalDay, HOME, finalDayOf, challengeYearAt,
@@ -956,6 +978,11 @@
             return INDIVIDUAL_STRETCH[uid][0];
         }
 
+        // Anything typed into the app — notes, places, names, goals — goes through
+        // this before it is put into the page, so it always shows as text.
+        const esc = (s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyCjvDHVf3-WEwxRXt2oTKyS3U-DrUeMJ4Q", authDomain: "a-to-a-walking.firebaseapp.com", projectId: "a-to-a-walking",
             storageBucket: "a-to-a-walking.firebasestorage.app", messagingSenderId: "482552425657", appId: "1:482552425657:web:fbbcc6ef15ca4589ad3f68"
@@ -973,6 +1000,12 @@
         // Names you've given trips, shared between both phones.
         const tripsDocRef = doc(publicDataCollection, 'trips');
         const logsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'challengeLogs');
+        // Notes and photos, one document per log under the same id. Kept apart from
+        // the logs because Firestore can only lock whole documents: the logs are
+        // there for anyone to look at, these only for the two of you.
+        const privateCollectionRef = collection(db, 'artifacts', appId, 'private', 'data', 'challengePrivate');
+        const PRIVATE_FIELDS = ['note', 'photoUrl', 'photoPath'];
+        const privateRef = (logId) => doc(privateCollectionRef, logId);
 
         // --- 📅 CHALLENGE YEAR ENGINE ---
         // A challenge year runs 1 Oct → 30 Sep. Year 1 = 1 Oct 2025 → 30 Sep 2026.
@@ -1063,6 +1096,206 @@
 
         const userSelector = document.getElementById('user-selector');
         const stepForm = document.getElementById('step-form');
+
+        // --- 🔐 Who can change things ---
+        // Anyone with the link can look. Changing anything needs one of your two
+        // email sign-ins, which the phone remembers, so it's only asked for once.
+        // Firebase's rules are what actually enforce it (see firestore.rules) —
+        // this just keeps the buttons away from anyone who couldn't use them.
+        let canEdit = false;      // signed in with one of your accounts
+        let editDenied = false;   // signed in, but the rules said no
+        let authKnown = false;    // until the saved sign-in has loaded, show neither state
+        let authUid;
+        let uiReady = false;      // listeners up and the map made, so updateUI can run
+
+        // Logs as they arrive from the shared collection, and the notes and photos
+        // that go with them, which only load once you're signed in.
+        let publicLogs = [];
+        let privateLogs = {};
+        let privateLoaded = false;
+        let privateUnsub = null;
+
+        function mergeLogs() {
+            logData = publicLogs.map(l => {
+                const out = { ...l };
+                // Older logs carry these on the shared copy until a signed-in phone
+                // has moved them; a visitor never sees them either way.
+                if (!canEdit) { PRIVATE_FIELDS.forEach(k => delete out[k]); return out; }
+                return { ...out, ...(privateLogs[l.id] || {}) };
+            });
+        }
+
+        function refresh() {
+            mergeLogs();
+            if (uiReady) updateUI();
+        }
+
+        function applyAuth(user) {
+            const uid = user ? user.uid : null;
+            if (authKnown && uid === authUid) return;
+            authKnown = true;
+            authUid = uid;
+            canEdit = !!user && !user.isAnonymous;
+            editDenied = false;
+            if (privateUnsub) { privateUnsub(); privateUnsub = null; }
+            privateLogs = {};
+            privateLoaded = false;
+            if (canEdit) {
+                privateUnsub = onSnapshot(privateCollectionRef, (snap) => {
+                    privateLogs = {};
+                    snap.docs.forEach(d => { privateLogs[d.id] = d.data(); });
+                    privateLoaded = true;
+                    refresh();
+                    moveLegacyPrivateFields();
+                }, (err) => {
+                    console.warn('[A-to-A] Notes and photos could not be loaded for this account:', err);
+                    if (err && err.code === 'permission-denied') {
+                        // Signed in, but this account isn't one the rules let in.
+                        editDenied = true;
+                        canEdit = false;
+                        renderAccess();
+                        refresh();
+                    }
+                });
+            }
+            renderAccess();
+            refresh();
+        }
+
+        function renderAccess() {
+            document.body.classList.toggle('read-only', !canEdit);
+            document.getElementById('view-only').classList.toggle('hidden', canEdit || !authKnown);
+            document.getElementById('view-only-text').textContent = editDenied
+                ? "Signed in, but Firebase's rules don't let this account make changes."
+                : '👀 View only';
+            document.getElementById('sign-in-open').textContent = editDenied ? 'Sign out' : 'Sign in';
+            if (canEdit || editDenied) document.getElementById('sign-in-form').classList.add('hidden');
+            document.getElementById('account-bar').classList.toggle('hidden', !canEdit);
+            if (!canEdit) { stretchEditing = null; stretchDraft = null; }
+        }
+
+        function signInMessage(err) {
+            const code = (err && err.code) || '';
+            if (/invalid-credential|wrong-password|user-not-found|invalid-email|invalid-login/.test(code)) return "That email and password don't match.";
+            if (/too-many-requests/.test(code)) return 'Too many tries. Wait a few minutes and try again.';
+            if (/network-request-failed/.test(code)) return 'No connection. Try again in a moment.';
+            if (/operation-not-allowed/.test(code)) return "Email sign-in isn't switched on in Firebase yet.";
+            return 'Could not sign in: ' + ((err && err.message) || err);
+        }
+
+        async function signOutHere() {
+            if (!confirm("Sign out on this device? You'll need the password to sign back in.")) return;
+            await signOut(auth);
+            try { await signInAnonymously(auth); } catch (e) { /* switched off: fine, looking needs no account */ }
+        }
+
+        document.getElementById('sign-in-open').addEventListener('click', () => {
+            if (editDenied) { signOutHere(); return; }
+            const form = document.getElementById('sign-in-form');
+            form.classList.toggle('hidden');
+            if (!form.classList.contains('hidden')) document.getElementById('sign-in-email').focus();
+        });
+        document.getElementById('sign-in-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('sign-in-email').value.trim();
+            const pw = document.getElementById('sign-in-password');
+            const errEl = document.getElementById('sign-in-error');
+            const btn = e.target.querySelector('button[type="submit"]');
+            errEl.textContent = '';
+            btn.disabled = true;
+            btn.textContent = 'Signing in...';
+            try {
+                await signInWithEmailAndPassword(auth, email, pw.value);
+                pw.value = '';
+            } catch (err) {
+                errEl.textContent = signInMessage(err);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sign in';
+            }
+        });
+        document.getElementById('sign-out-btn').addEventListener('click', signOutHere);
+        document.getElementById('backup-btn').addEventListener('click', () => downloadBackup());
+
+        // Notes and photos used to sit on the shared logs. The first signed-in phone
+        // to open moves them across. Each log's copy and its removal go in the same
+        // all-or-nothing write, so nothing can fall between the two.
+        let moving = false;
+        async function moveLegacyPrivateFields() {
+            if (!canEdit || !privateLoaded || moving) return;
+            const legacy = publicLogs.filter(l => PRIVATE_FIELDS.some(k => k in l));
+            if (!legacy.length) return;
+            moving = true;
+            try {
+                keepCopyBeforeMove(legacy);
+                for (let i = 0; i < legacy.length; i += 200) {
+                    const batch = writeBatch(db);
+                    legacy.slice(i, i + 200).forEach(l => {
+                        const already = privateLogs[l.id] || {};
+                        const keep = {}, clear = {};
+                        PRIVATE_FIELDS.forEach(k => {
+                            if (!(k in l)) return;
+                            clear[k] = deleteField();
+                            // Never over anything saved since: the private copy is the newer one.
+                            if (l[k] != null && l[k] !== '' && !(k in already)) keep[k] = l[k];
+                        });
+                        if (Object.keys(keep).length) batch.set(privateRef(l.id), keep, { merge: true });
+                        batch.update(doc(logsCollectionRef, l.id), clear);
+                    });
+                    await batch.commit();
+                }
+                console.log(`[A-to-A] Moved notes and photos off ${legacy.length} shared logs.`);
+            } catch (err) {
+                console.warn('[A-to-A] Could not move notes and photos yet; will try again next time:', err);
+            } finally {
+                moving = false;
+            }
+        }
+        // A copy on this phone of what's about to move, just in case.
+        function keepCopyBeforeMove(legacy) {
+            try {
+                const key = 'a2a-private-move-copy';
+                const copy = JSON.parse(localStorage.getItem(key) || '{}');
+                legacy.forEach(l => {
+                    if (copy[l.id]) return;
+                    const keep = {};
+                    PRIVATE_FIELDS.forEach(k => { if (l[k] != null && l[k] !== '') keep[k] = l[k]; });
+                    if (Object.keys(keep).length) copy[l.id] = keep;
+                });
+                localStorage.setItem(key, JSON.stringify(copy));
+            } catch (e) { /* storage full or blocked; the move itself is still all-or-nothing */ }
+        }
+
+        // --- 💾 Backup ---
+        // Everything as one file: every log with its note and photo link, both of
+        // your docs and the trip edits. The photos themselves stay in Firebase.
+        async function downloadBackup() {
+            if (!privateLoaded) { alert('Still loading your notes and photos. Try again in a moment.'); return; }
+            const data = {
+                app: 'A to A Walking',
+                exportedAt: new Date().toISOString(),
+                users: { user1: userData.user1, user2: userData.user2 },
+                trips: { names: tripNames, custom: tripEdits.custom, hidden: tripEdits.hidden },
+                logs: [...logData]
+                    .sort((a, b) => (a.date ? a.date.toMillis() : 0) - (b.date ? b.date.toMillis() : 0))
+                    .map(l => ({ ...l, date: l.date ? l.date.toDate().toISOString() : null }))
+            };
+            const name = `a-to-a-backup-${tripDayKey(new Date())}.json`;
+            const file = new File([JSON.stringify(data, null, 1)], name, { type: 'application/json' });
+            // On a phone the share sheet is how a file gets somewhere: Files, email, Drive.
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try { await navigator.share({ files: [file] }); return; }
+                catch (e) { if (e && e.name === 'AbortError') return; }
+            }
+            const url = URL.createObjectURL(file);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        }
         const stepInput = document.getElementById('step-input');
         const statsFilter = document.getElementById('stats-filter');
         const passportContainer = document.getElementById('passport-container');
@@ -1154,7 +1387,7 @@
             await uploadBytes(sref, compressed, { contentType: 'image/jpeg' });
             const url = await getDownloadURL(sref);
             showLoading('Saving...');
-            await updateDoc(doc(logsCollectionRef, logId), { photoUrl: url, photoPath: path });
+            await setDoc(privateRef(logId), { photoUrl: url, photoPath: path }, { merge: true });
         }
 
         async function removePhotoForLog(logId, photoPath) {
@@ -1166,12 +1399,13 @@
                     if (e.code !== 'storage/object-not-found') throw e;
                 }
             }
-            await updateDoc(doc(logsCollectionRef, logId), { photoUrl: null, photoPath: null });
+            await setDoc(privateRef(logId), { photoUrl: null, photoPath: null }, { merge: true });
         }
 
         // --- Logic ---
 
         async function initializeUserDocs() {
+            if (!canEdit) return;
             try {
                 const [u1, u2] = await Promise.all([getDoc(user1DocRef), getDoc(user2DocRef)]);
                 if (!u1.exists()) await setDoc(user1DocRef, { name: "Ant", steps: 0 });
@@ -1222,7 +1456,7 @@
                 <div class="progress-bar-track overflow-visible">
                     <div class="${isAnt ? 'progress-bar-fill-ant' : 'progress-bar-fill-amy'}" style="width: ${pct}%"></div>
                     <!-- Peer marker (triangle up from the bottom) — the other one of you, this year -->
-                    <div class="peer-marker bottom" style="left: ${peerPct}%; border-bottom-color: ${peerColour};" title="${userData[peer].name}"></div>
+                    <div class="peer-marker bottom" style="left: ${peerPct}%; border-bottom-color: ${peerColour};" title="${esc(userData[peer].name)}"></div>
                     ${ghost > 0 ? `<!-- Ghost marker (triangle down from the top) — you, on this day last year -->
                     <div class="peer-marker top marker-ghost" style="left: ${ghostPct}%; border-top-color: ${ownColour};"></div>
                     <!-- Tapping it says what you'd done by now last year. The triangle is
@@ -1244,7 +1478,7 @@
                     </div>
                     <div class="mini-track">
                         <div class="mini-fill" style="width: ${atPct}%; background: ${ownColour};"></div>
-                        <div class="mini-marker" style="left: ${atPeerPct}%; border-bottom-color: ${peerColour};" title="${userData[peer].name}"></div>
+                        <div class="mini-marker" style="left: ${atPeerPct}%; border-bottom-color: ${peerColour};" title="${esc(userData[peer].name)}"></div>
                     </div>
                 </div>
                 </div>
@@ -1480,34 +1714,34 @@
                     const div = document.createElement('div');
                     div.className = 'log-entry p-2 border rounded text-xs bg-white flex justify-between items-start gap-2';
                     const date = l.date.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short'});
-                    const photoPathAttr = l.photoPath ? ` data-photo-path="${l.photoPath}"` : '';
+                    const photoPathAttr = l.photoPath ? ` data-photo-path="${esc(l.photoPath)}"` : '';
                     const thumb = l.photoUrl
-                        ? `<img src="${l.photoUrl}" class="log-photo-thumb" data-id="${l.id}" data-url="${l.photoUrl}" alt="Log photo" />`
+                        ? `<img src="${esc(l.photoUrl)}" class="log-photo-thumb" data-id="${esc(l.id)}" data-url="${esc(l.photoUrl)}" alt="Log photo" />`
                         : '';
                     div.innerHTML = `
                         <div class="flex gap-2 flex-1 min-w-0 items-start">
                             ${thumb}
                             <div class="min-w-0 flex-1">
                                 <span class="font-bold ${uid==='user1'?'text-green-600':'text-purple-600'}">${l.steps.toLocaleString()}</span>
-                                <span class="text-gray-400 ml-1 cursor-pointer hover:underline edit-date" data-id="${l.id}" data-date="${l.date.toDate().toISOString().split('T')[0]}" style="white-space: nowrap;">${date}</span>${exerciseBadge(l)}
-                                ${l.note ? `<div class="text-gray-600 italic">"${l.note}"</div>` : ''}
-                                ${l.locationName ? `<div class="text-gray-500 truncate max-w-[140px] sm:max-w-[180px] show-location cursor-pointer hover:underline" data-loc="${(l.locationName || '').replace(/"/g, '&quot;')}">📍 ${l.locationName}</div>` : ''}
+                                <span class="text-gray-400 ml-1${canEdit ? ' cursor-pointer hover:underline edit-date' : ''}" data-id="${l.id}" data-date="${l.date.toDate().toISOString().split('T')[0]}" style="white-space: nowrap;">${date}</span>${exerciseBadge(l)}
+                                ${l.note ? `<div class="text-gray-600 italic">"${esc(l.note)}"</div>` : ''}
+                                ${l.locationName ? `<div class="text-gray-500 truncate max-w-[140px] sm:max-w-[180px] show-location cursor-pointer hover:underline" data-loc="${esc(l.locationName)}">📍 ${esc(l.locationName)}</div>` : ''}
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-1 flex-shrink-0">
+                        ${canEdit ? `<div class="grid grid-cols-2 gap-1 flex-shrink-0">
                             <button class="text-amber-400 hover:text-amber-600 edit-photo" data-id="${l.id}" title="${l.photoUrl ? 'Change photo' : 'Add photo'}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                             </button>
                             <button class="text-gray-400 hover:text-gray-600 edit-loc" data-id="${l.id}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                             </button>
-                            <button class="text-blue-400 hover:text-blue-600 edit-note" data-id="${l.id}" data-note="${l.note||''}">
+                            <button class="text-blue-400 hover:text-blue-600 edit-note" data-id="${l.id}" data-note="${esc(l.note)}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             </button>
                             <button class="text-red-400 hover:text-red-600 del-log" data-id="${l.id}" data-steps="${l.steps}" data-uid="${uid}"${photoPathAttr}>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
-                        </div>
+                        </div>` : ''}
                     `;
                     el.appendChild(div);
                 });
@@ -1723,7 +1957,7 @@
                     const movedAttr = dayIds.length ? ` data-moved="${dayIds.map(id => `${activityFor(id).emoji} ${activityFor(id).label}`).join(' · ')}"` : '';
                     const ring = uid === 'user1' ? '#16a34a' : '#9333ea';
 
-                    html += `<div class="heatmap-cell${dayIds.length ? ' has-moved' : ''}" style="background: ${bg}; ${border} ${textColor} cursor: pointer; --moved-ring: ${ring};" data-steps="${steps}" data-day="${d}" data-name="${name}"${movedAttr}>${d}</div>`;
+                    html += `<div class="heatmap-cell${dayIds.length ? ' has-moved' : ''}" style="background: ${bg}; ${border} ${textColor} cursor: pointer; --moved-ring: ${ring};" data-steps="${steps}" data-day="${d}" data-name="${esc(name)}"${movedAttr}>${d}</div>`;
                 }
 
                 html += '</div></div>';
@@ -1965,10 +2199,10 @@
                 <div class="max-w-3xl mx-auto p-4 pb-12">
                     <div class="flex justify-between items-center mb-3">
                         <button type="button" id="trip-close" class="text-gray-500 text-sm font-semibold py-2 pr-3">‹ Back</button>
-                        <span>
+                        ${canEdit ? `<span>
                             <button type="button" id="trip-dates" class="text-gray-400 text-sm py-2 pl-3" title="Change the dates">📅 Dates</button>
                             <button type="button" id="trip-rename" class="text-gray-400 text-sm py-2 pl-3" title="Rename">✏️ Rename</button>
-                        </span>
+                        </span>` : ''}
                     </div>
                     <h2 class="text-2xl font-extrabold text-gray-800">${esc(tripTitle(t))} ${tripFlag(t)}</h2>
                     <p class="text-sm text-gray-500">${tripDates(t)} · ${t.days} day${t.days === 1 ? '' : 's'}</p>
@@ -2021,6 +2255,7 @@
             const card = e.target.closest('.trip-card');
             if (card) { openTrip(card.dataset.trip); return; }
             if (e.target.closest('#trip-close')) { closeTrip(); return; }
+            if (!canEdit) return;
             if (e.target.closest('#trip-rename')) {
                 const t = currentTrips().find(x => x.key === openTripKey);
                 if (!t) return;
@@ -2103,9 +2338,6 @@
         };
 
         // --- 🕰️ "A year ago today" ---
-
-        const esc = (s) => String(s == null ? '' : s)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
         // A log only counts as a memory if there's something to actually look back at.
         const isMemorable = (l) => !!(l && (l.note || l.photoUrl || l.locationName));
@@ -2258,7 +2490,7 @@
                     let icon;
                     if (log.photoUrl) {
                         icon = L.divIcon({
-                            html: `<div class="photo-pin ${isAnt ? '' : 'amy'}"><img src="${log.photoUrl}" alt="" /></div>`,
+                            html: `<div class="photo-pin ${isAnt ? '' : 'amy'}"><img src="${esc(log.photoUrl)}" alt="" /></div>`,
                             className: 'photo-pin-wrap', // combined with .leaflet-div-icon — we override its styles
                             iconSize: [44, 54],          // 44 circle + 10 tail
                             iconAnchor: [22, 54],
@@ -2293,9 +2525,9 @@
                                 <span class="text-gray-500 font-normal">${log.date.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short'})}</span>
                             </div>
 
-                            ${log.note ? `<div class="italic text-gray-700 mb-1">"${log.note}"</div>` : ''}
-                            ${shortLocation ? `<div class="text-gray-500 text-xs flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg> ${shortLocation}</div>` : ''}
-                            ${log.photoUrl ? `<img src="${log.photoUrl}" class="popup-photo" data-id="${log.id}" data-url="${log.photoUrl}" alt="Log photo" />` : ''}
+                            ${log.note ? `<div class="italic text-gray-700 mb-1">"${esc(log.note)}"</div>` : ''}
+                            ${shortLocation ? `<div class="text-gray-500 text-xs flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg> ${esc(shortLocation)}</div>` : ''}
+                            ${log.photoUrl ? `<img src="${esc(log.photoUrl)}" class="popup-photo" data-id="${esc(log.id)}" data-url="${esc(log.photoUrl)}" alt="Log photo" />` : ''}
                         </div>`;
                     
                     marker.bindPopup(popupContent, { maxWidth: 220 });
@@ -2373,21 +2605,21 @@
                 const f = editing && stretchDraft ? stretchDraft : g;
                 div.innerHTML += `<div class="bg-white p-3 rounded border-l-4 ${done?'border-amber-400 bg-amber-50':'border-gray-200'} shadow-sm">
                     <div class="flex justify-between items-start">
-                        <div><div class="font-bold text-sm">${g.label} (${userData[uid].name})</div><div class="text-xs text-gray-500">${g.steps.toLocaleString()}</div>
+                        <div><div class="font-bold text-sm">${esc(g.label)} (${esc(userData[uid].name)})</div><div class="text-xs text-gray-500">${g.steps.toLocaleString()}</div>
                         ${!done ? `<div class="text-[10px] mt-1 text-${uid==='user1'?'green':'purple'}-600">${daysToGoalText(uid, g)}</div>
                         ${targetDateText(uid, g) ? `<div class="text-[10px] mt-0.5 text-gray-500">${targetDateText(uid, g)}</div>` : ''}` : `<div class="text-[10px] mt-1 text-amber-600 font-bold">Smashed it! 🎉</div>`}
                         </div>
                         <div class="flex items-center gap-2">
-                            <div class="text-xl">${g.reward}</div>
-                            <button class="stretch-edit-btn text-gray-400 hover:text-gray-700 text-xs leading-none p-1" data-uid="${uid}" title="Edit goal">✏️</button>
+                            <div class="text-xl">${esc(g.reward)}</div>
+                            ${canEdit ? `<button class="stretch-edit-btn text-gray-400 hover:text-gray-700 text-xs leading-none p-1" data-uid="${uid}" title="Edit goal">✏️</button>` : ''}
                         </div>
                     </div>
                     ${editing ? `
                     <div class="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                        <input type="text" class="stretch-f-label w-full text-sm border rounded px-2 py-1" placeholder="What are you working towards?" value="${String(f.label).replace(/"/g,'&quot;')}" maxlength="40" />
+                        <input type="text" class="stretch-f-label w-full text-sm border rounded px-2 py-1" placeholder="What are you working towards?" value="${esc(f.label)}" maxlength="40" />
                         <div class="flex gap-2">
                             <input type="number" class="stretch-f-steps flex-1 text-sm border rounded px-2 py-1" placeholder="Steps" value="${f.steps}" min="1" step="1000" />
-                            <input type="text" class="stretch-f-reward w-16 text-sm border rounded px-2 py-1 text-center" placeholder="🎁" value="${String(f.reward).replace(/"/g,'&quot;')}" maxlength="4" />
+                            <input type="text" class="stretch-f-reward w-16 text-sm border rounded px-2 py-1 text-center" placeholder="🎁" value="${esc(f.reward)}" maxlength="4" />
                         </div>
                         <div class="flex gap-2 items-center">
                             <label class="text-[10px] text-gray-500 whitespace-nowrap">By (optional)</label>
@@ -2478,8 +2710,8 @@
                     const border = isGold ? 'border-2' : 'border';
 
                     let detail = '';
-                    if (entry.note) detail = `<span class="text-gray-500 italic"> "${entry.note}"</span>`;
-                    else if (entry.locationName) detail = `<span class="text-gray-400"> 📍 ${entry.locationName.split(',')[0]}</span>`;
+                    if (entry.note) detail = `<span class="text-gray-500 italic"> "${esc(entry.note)}"</span>`;
+                    else if (entry.locationName) detail = `<span class="text-gray-400"> 📍 ${esc(entry.locationName.split(',')[0])}</span>`;
 
                     html += `<div class="${bg} ${border} p-2 rounded-lg flex items-center gap-2">
                         <span class="text-lg">${medals[i]}</span>
@@ -2556,10 +2788,15 @@
         // ticked it is the emoji themselves, and tapping those edits them.
         function exerciseBadge(l) {
             const ids = logActivities(l);
+            if (!canEdit) {
+                if (!ids.length) return '';
+                const t = esc(describeActivities(ids, l.exerciseOther));
+                return `<span class="log-exercise" title="${t}" aria-label="Exercise: ${t}">${ids.map(id => activityFor(id).emoji).join('')}</span>`;
+            }
             if (!ids.length) {
                 return `<button type="button" class="edit-exercise log-exercise log-exercise-empty" data-id="${l.id}" title="Add exercise" aria-label="Add exercise">💪</button>`;
             }
-            const title = describeActivities(ids, l.exerciseOther).replace(/"/g, '&quot;');
+            const title = esc(describeActivities(ids, l.exerciseOther));
             return `<button type="button" class="edit-exercise log-exercise" data-id="${l.id}" title="${title}" aria-label="Exercise: ${title}">${ids.map(id => activityFor(id).emoji).join('')}</button>`;
         }
 
@@ -2627,7 +2864,7 @@
             // Tap the truncated location line to see the full name in a modal.
             const locEl = e.target.closest('.show-location');
             if (locEl) {
-                showModal('Location', `<p class="text-gray-700 break-words">📍 ${locEl.dataset.loc}</p>`, () => {}, 'Close');
+                showModal('Location', `<p class="text-gray-700 break-words">📍 ${esc(locEl.dataset.loc)}</p>`, () => {}, 'Close');
                 return;
             }
             // Clicking a thumbnail (log list) or popup photo (map) opens the lightbox.
@@ -2641,11 +2878,18 @@
                 // Look up the log so we can pass the storage path to the remove handler.
                 const log = logData.find(l => l.id === photoEl.dataset.id);
                 removeBtn.dataset.photoPath = log && log.photoPath ? log.photoPath : '';
+                removeBtn.classList.toggle('hidden', !canEdit);
                 lb.classList.remove('hidden');
                 return;
             }
 
             const btn = e.target.closest('button');
+            if (btn && btn.id === 'lightbox-close') {
+                document.getElementById('lightbox-overlay').classList.add('hidden');
+                return;
+            }
+            // Everything below changes something.
+            if (!canEdit) return;
             const span = e.target.closest('span.edit-date');
             if(span) {
                 showModal('Change Date', `<input type="date" id="m-date" value="${span.dataset.date}" class="w-full border p-2 rounded">`, async () => {
@@ -2656,8 +2900,8 @@
             if(!btn) return;
 
             if(btn.classList.contains('edit-note')) {
-                showModal('Edit Note', `<textarea id="m-note" class="w-full border p-2 rounded" maxlength="150">${btn.dataset.note}</textarea>`, async () => {
-                    await updateDoc(doc(logsCollectionRef, btn.dataset.id), { note: document.getElementById('m-note').value });
+                showModal('Edit Note', `<textarea id="m-note" class="w-full border p-2 rounded" maxlength="150">${esc(btn.dataset.note)}</textarea>`, async () => {
+                    await setDoc(privateRef(btn.dataset.id), { note: document.getElementById('m-note').value }, { merge: true });
                 });
             }
             if(btn.classList.contains('edit-exercise')) {
@@ -2687,9 +2931,6 @@
                 const fi = document.getElementById('photo-file-input');
                 fi.value = ''; // so selecting the same file twice still fires 'change'
                 fi.click();
-            }
-            if(btn.id === 'lightbox-close') {
-                document.getElementById('lightbox-overlay').classList.add('hidden');
             }
             if(btn.id === 'lightbox-remove') {
                 const { id, photoPath } = btn.dataset;
@@ -2724,6 +2965,7 @@
                         const u = await t.get(ref);
                         t.update(ref, { steps: Math.max(0, u.data().steps - parseInt(steps)) });
                         t.delete(doc(logsCollectionRef, id));
+                        t.delete(privateRef(id));
                     });
                 });
             }
@@ -2733,6 +2975,7 @@
         document.getElementById('photo-file-input').addEventListener('change', async e => {
             const file = e.target.files && e.target.files[0];
             const logId = pendingPhotoLogId;
+            if (!canEdit) return;
             pendingPhotoLogId = null;
             if (!file || !logId) return;
             try {
@@ -2825,7 +3068,7 @@
 
         async function handleStepSubmit(e) {
             e.preventDefault();
-            if (!currentUser) return;
+            if (!currentUser || !canEdit) return;
             const steps = parseInt(stepInput.value, 10);
             if (isNaN(steps) || steps <= 0) return;
             
@@ -2852,7 +3095,7 @@
                     const newTotal = uDoc.data().steps + steps;
                     t.update(uDoc.ref, { steps: newTotal });
                     t.set(doc(logsCollectionRef), {
-                        userId: currentUser, steps: steps, note: "", date: Timestamp.fromDate(selectedDate),
+                        userId: currentUser, steps: steps, date: Timestamp.fromDate(selectedDate),
                         // Only present when ticked, so a plain log looks exactly like one from before.
                         ...(exercise || {})
                     });
@@ -3386,10 +3629,18 @@
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
-                    await signInAnonymously(auth);
+                    // A phone you've signed in on stays signed in. Wait for that to
+                    // load before deciding this is someone just looking.
+                    await auth.authStateReady();
                 }
             } catch (e) { console.error("Authentication failed", e); }
-            
+            if (!auth.currentUser) {
+                // Looking needs no account under the new rules; the old ones wanted
+                // any sign-in at all, so keep making one while it's allowed.
+                try { await signInAnonymously(auth); } catch (e) { /* switched off: fine */ }
+            }
+            applyAuth(auth.currentUser);
+
             await initializeUserDocs();
             const sub = document.getElementById('header-subtitle');
             if (sub) sub.textContent = `Year ${currentChallengeYear()} · Est. Oct 25`;
@@ -3415,10 +3666,14 @@
             });
             const logsQuery = query(logsCollectionRef, orderBy("date", "desc"));
             onSnapshot(logsQuery, (snapshot) => {
-                logData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                updateUI();
+                publicLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                refresh();
                 auditStepTotals();
+                moveLegacyPrivateFields();
             });
+            uiReady = true;
+            // Signing in or out from here on.
+            onAuthStateChanged(auth, applyAuth);
         }
 
         // --- 🔍 Data audit ---

@@ -11,6 +11,13 @@
 // The fixture comes from window.__fixture, set by tests/boot.mjs before the page
 // loads. State lives on window.__fb so all four module instances share it and
 // tests can read what was written.
+//
+// Sign-in: the phone starts signed in as Ant unless the fixture says
+// `user: null` (a visitor). Signing in is remembered across a reload, like the
+// real thing. With `rules: 'locked'` it enforces what firestore.rules says —
+// anyone can read the shared data, only Ant and Amy can write, and only they
+// can read the private notes and photos. Without it everything is allowed,
+// which is how the project was set up before the rules went in.
 
 const ts = (d) => {
   const date = d instanceof Date ? d : new Date(d);
@@ -24,6 +31,28 @@ const state = (window.__fb = window.__fb || {
   seq: 0,
   failNext: null     // set to an Error to make the next write throw
 });
+
+export const ACCOUNTS = {
+  'ant@test.example': { password: 'walk-walk', uid: 'uid-ant' },
+  'amy@test.example': { password: 'walk-walk', uid: 'uid-amy' },
+  'someone@test.example': { password: 'walk-walk', uid: 'uid-someone' }
+};
+const ALLOWED = ['uid-ant', 'uid-amy'];
+const editor = (email) => ({ uid: ACCOUNTS[email].uid, email, isAnonymous: false });
+
+if (!('user' in state)) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('__fb_user') || 'null'); } catch (e) { /* none */ }
+  const fx = window.__fixture || {};
+  state.user = saved || ('user' in fx ? fx.user : editor('ant@test.example'));
+  state.authSubs = [];
+}
+const locked = () => (window.__fixture || {}).rules === 'locked';
+const isUs = () => !!state.user && ALLOWED.includes(state.user.uid);
+const isPrivate = (path) => /\/private\//.test(path);
+function denied() { const e = new Error('Missing or insufficient permissions.'); e.code = 'permission-denied'; return e; }
+function canWrite() { if (locked() && !isUs()) throw denied(); }
+const canRead = (path) => !(locked() && isPrivate(path) && !isUs());
 
 function revive(data) {
   const out = { ...data };
@@ -46,6 +75,8 @@ function seed(path) {
     m.set('user1', { name: 'Ant', steps: sum('user1'), ...(users.user1 || {}) });
     m.set('user2', { name: 'Amy', steps: sum('user2'), ...(users.user2 || {}) });
     Object.entries(fx.docs || {}).forEach(([id, d]) => m.set(id, { ...d }));
+  } else if (/challengePrivate$/.test(path)) {
+    Object.entries(fx.private || {}).forEach(([id, d]) => m.set(id, { ...d }));
   }
   state.cols[path] = m;
   return m;
@@ -84,27 +115,52 @@ function maybeFail() {
   if (state.failNext) { const e = state.failNext; state.failNext = null; throw e; }
 }
 
+const DELETE = { __deleteField: true };
+const dropDeleted = (o) => { Object.keys(o).forEach((k) => { if (o[k] && o[k].__deleteField) delete o[k]; }); return o; };
+
 function write(ref, data, mode) {
   const m = seed(ref.col);
   if (mode === 'delete') m.delete(ref.id);
   else if (mode === 'update') {
     if (!m.has(ref.id)) throw new Error('No document to update: ' + ref.col + '/' + ref.id);
-    m.set(ref.id, { ...m.get(ref.id), ...data });
-  } else if (mode === 'merge') m.set(ref.id, { ...(m.get(ref.id) || {}), ...data });
-  else m.set(ref.id, { ...data });
+    m.set(ref.id, dropDeleted({ ...m.get(ref.id), ...data }));
+  } else if (mode === 'merge') m.set(ref.id, dropDeleted({ ...(m.get(ref.id) || {}), ...data }));
+  else m.set(ref.id, dropDeleted({ ...data }));
   state.writes.push({ mode, path: ref.col, id: ref.id, data });
 }
 
 // --- app / auth / storage --------------------------------------------------
 export const initializeApp = () => ({});
-export const getAuth = () => ({ currentUser: { uid: 'test' } });
-export const signInAnonymously = async () => ({ user: { uid: 'test' } });
-export const signInWithCustomToken = async () => ({ user: { uid: 'test' } });
+const authObj = { get currentUser() { return state.user; }, authStateReady: async () => {} };
+export const getAuth = () => authObj;
+function setUser(u, { remember = true } = {}) {
+  state.user = u;
+  if (remember) { try { localStorage.setItem('__fb_user', JSON.stringify(u)); } catch (e) { /* ignore */ } }
+  state.authSubs.forEach((cb) => cb(u));
+}
+export const signInAnonymously = async () => {
+  if ((window.__fixture || {}).anonymousOff) { const e = new Error('admin-restricted-operation'); e.code = 'auth/admin-restricted-operation'; throw e; }
+  setUser({ uid: 'anon-' + (++state.seq), isAnonymous: true }, { remember: false }); return { user: state.user };
+};
+export const signInWithCustomToken = async () => ({ user: state.user });
+export async function signInWithEmailAndPassword(_auth, email, password) {
+  const a = ACCOUNTS[String(email).trim().toLowerCase()];
+  if (state.authFailNext) { const e = state.authFailNext; state.authFailNext = null; throw e; }
+  if (!a || a.password !== password) { const e = new Error('Firebase: Error (auth/invalid-credential).'); e.code = 'auth/invalid-credential'; throw e; }
+  setUser(editor(String(email).trim().toLowerCase()));
+  return { user: state.user };
+}
+export async function signOut() { setUser(null); }
+export function onAuthStateChanged(_auth, cb) {
+  state.authSubs.push(cb);
+  setTimeout(() => cb(state.user), 0);
+  return () => { state.authSubs = state.authSubs.filter((c) => c !== cb); };
+}
 export const getStorage = () => ({});
 export const ref = (_s, path) => ({ fullPath: path });
-export const uploadBytes = async () => ({});
+export const uploadBytes = async () => { canWrite(); return {}; };
 export const getDownloadURL = async (r) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ccc"/></svg>`);
-export const deleteObject = async () => {};
+export const deleteObject = async () => { canWrite(); };
 
 // --- firestore -------------------------------------------------------------
 export const getFirestore = () => ({});
@@ -117,13 +173,31 @@ export function doc(parent, ...segs) {
   const id = segs.length ? segs.join('/') : 'auto-' + (++state.seq);
   return { col, id };
 }
-export const getDoc = async (r) => snapDoc(r);
-export const setDoc = async (r, data, opts) => { maybeFail(); write(r, data, opts && opts.merge ? 'merge' : 'set'); fire(r.col, new Set([r.id])); };
-export const updateDoc = async (r, data) => { maybeFail(); write(r, data, 'update'); fire(r.col, new Set([r.id])); };
-export const deleteDoc = async (r) => { maybeFail(); write(r, null, 'delete'); fire(r.col, new Set([r.id])); };
+export const deleteField = () => DELETE;
+export const getDoc = async (r) => { if (!canRead(r.col)) throw denied(); return snapDoc(r); };
+export const setDoc = async (r, data, opts) => { maybeFail(); canWrite(); write(r, data, opts && opts.merge ? 'merge' : 'set'); fire(r.col, new Set([r.id])); };
+export const updateDoc = async (r, data) => { maybeFail(); canWrite(); write(r, data, 'update'); fire(r.col, new Set([r.id])); };
+export const deleteDoc = async (r) => { maybeFail(); canWrite(); write(r, null, 'delete'); fire(r.col, new Set([r.id])); };
+
+// All or nothing, like the real batch: nothing is written if any of it is refused.
+export function writeBatch() {
+  const ops = [];
+  const b = {
+    set: (r, d, opts) => { ops.push([r, d, opts && opts.merge ? 'merge' : 'set']); return b; },
+    update: (r, d) => { ops.push([r, d, 'update']); return b; },
+    delete: (r) => { ops.push([r, null, 'delete']); return b; },
+    commit: async () => {
+      maybeFail(); canWrite();
+      const touched = new Map();
+      ops.forEach(([r, d, mode]) => { write(r, d, mode); if (!touched.has(r.col)) touched.set(r.col, new Set()); touched.get(r.col).add(r.id); });
+      touched.forEach((ids, col) => fire(col, ids));
+    }
+  };
+  return b;
+}
 
 export async function runTransaction(_db, fn) {
-  maybeFail();
+  maybeFail(); canWrite();
   const ops = [];
   const t = {
     get: async (r) => snapDoc(r),
@@ -138,11 +212,14 @@ export async function runTransaction(_db, fn) {
   return result;
 }
 
-export function onSnapshot(target, cb) {
+export function onSnapshot(target, cb, onError) {
   const sub = target.__col ? { path: target.__col, id: null, cb } : { path: target.col, id: target.id, cb };
+  // A refused listener reports once and never delivers, as in the real thing.
+  if (!canRead(sub.path)) { setTimeout(() => onError && onError(denied()), 5); return () => {}; }
   state.subs.push(sub);
   // First delivery is async, as in the real thing.
   setTimeout(() => {
+    if (!state.subs.includes(sub)) return;
     if (sub.id == null) cb(snapCol(sub.path));
     else cb(snapDoc({ col: sub.path, id: sub.id }));
   }, 5);

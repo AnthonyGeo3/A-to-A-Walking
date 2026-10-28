@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// A to A Walking: who can do what in the database.
+//
+// To use: Firebase console → Firestore Database → Rules. Replace everything
+// there with this file, put your two User UIDs (Authentication → Users) in
+// place of ANT_UID and AMY_UID, and press Publish.
+//
+// Anyone can look at steps, places, goals and trips; that's the page you can
+// share. Only the two of you can change anything, and only you two can see
+// notes and photos.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isUs() {
+      return request.auth != null
+        && request.auth.uid in ['ANT_UID', 'AMY_UID'];
+    }
+
+    // The logs, both of your docs (steps, goals) and the trip names.
+    match /artifacts/{appId}/public/data/{collection}/{docId} {
+      allow read: if true;
+      allow write: if isUs();
+    }
+
+    // Notes and photo links, one document per log.
+    match /artifacts/{appId}/private/data/{collection}/{docId} {
+      allow read, write: if isUs();
+    }
+
+    // Anything not listed above is closed.
+  }
+}
