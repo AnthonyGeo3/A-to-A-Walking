@@ -20,6 +20,13 @@ Two kinds:
   Each prints its checks and exits non-zero on a failure. Screenshots go to
   `tests/.out/` (ignored by git).
 
+The stand-in starts every page signed in as Ant, so the form and edit buttons
+are there. A fixture with `user: null` is a visitor instead, and
+`rules: 'locked'` makes it enforce what `firestore.rules` says (anyone reads
+the logs, only Ant and Amy write, only they read notes and photos).
+`security.mjs` covers that: the read-only view, signing in, notes moving to the
+private store, text that can't run as code, and the backup file.
+
 `boot.mjs` holds the shared setup: a fixed clock, a fixture of logs, and every
 CDN answered locally. Without `setup.sh` the tests still run — Tailwind falls
 back to `.hidden` only and Leaflet to a do-nothing fake — but screenshots won't

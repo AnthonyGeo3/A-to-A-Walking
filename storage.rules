@@ -1,0 +1,24 @@
+rules_version = '2';
+
+// A to A Walking: who can do what with the photos.
+//
+// To use: Firebase console → Storage → Rules. Replace everything there with
+// this file, put in the same two User UIDs as firestore.rules, and Publish.
+//
+// Only the two of you can add or remove photos. The app shows them through
+// the links saved with your notes, which only you two can read.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isUs() {
+      return request.auth != null
+        && request.auth.uid in ['ANT_UID', 'AMY_UID'];
+    }
+
+    match /photos/{file} {
+      allow read, write: if isUs();
+    }
+
+    // Anything not listed above is closed.
+  }
+}
